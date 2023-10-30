@@ -4,7 +4,7 @@
 """wrapper on a list to allow interruption and resume"""
 
 from __future__ import annotations
-import os, pickle
+import os, pickle, traceback
 from typing import Any, Callable
 
 
@@ -34,9 +34,10 @@ def resumable(
                 exit(1)
             except Exception as e:
                 if j == retry - 1:
-                    print(f"{e}. All retry failed.")
+                    print(f"All retry failed:")
+                    traceback.print_exc()
                     return
-                print(f"{e}, retrying [{j + 1}]...")
+                print(f"{type(e).__name__}: {e}, retrying [{j + 1}]...")
             else:
                 break
         with open(checkpoint_path, "wb") as checkpoint_file:

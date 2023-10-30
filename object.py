@@ -9,15 +9,11 @@ from io import TextIOWrapper
 from functools import partial
 from gpt import anychat_gpt_35, g4f_gpt_4
 from interrupt_wrapper import resumable
-
-prompt_path = "object_prompt.txt"
-rlhf_data_path = "dataset/rlhf.json"
-object_data_path = "dataset/objects.txt"
-splitter = "@@@@"
+from args import *
 
 
 class GPTExtractor:
-    def __init__(self, version=4, path=prompt_path) -> None:
+    def __init__(self, version=4, path=object_prompt_path) -> None:
         if version == 4:
             self.complete = partial(g4f_gpt_4, stream=False)
         elif version == 35:
@@ -37,7 +33,7 @@ def extract_sample(sample: dict, extractor: GPTExtractor, output_fd: TextIOWrapp
         hal_index = 3 - norm_index
         hal_obj = extractor.extract(sample[f"output_{hal_index}"])
         norm_obj = extractor.extract(sample[f"output_{norm_index}"])
-        output_fd.write(splitter.join([sample["image"], hal_obj, norm_obj]) + "\n")
+        output_fd.write(column_splitter.join([sample["image"], hal_obj, norm_obj]) + "\n")
         output_fd.flush()
 
 
