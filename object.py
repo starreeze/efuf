@@ -13,21 +13,21 @@ from args import *
 
 
 class GPTExtractor:
-    def __init__(self, version=4, path=object_prompt_path) -> None:
+    def __init__(self, prompt_path, version=4) -> None:
         if version == 4:
             self.complete = partial(g4f_gpt_4, stream=False)
         elif version == 35:
             self.complete = anychat_gpt_35
         else:
             raise NotImplementedError()
-        with open(path, "r") as f:
+        with open(prompt_path, "r") as f:
             self.prompt = f.read()
 
     def extract(self, inputs: str) -> str:
         return self.complete([{"role": "user", "content": self.prompt.format(inputs)}])  # type:ignore
 
 
-def extract_sample(sample: dict, extractor: GPTExtractor, output_fd: TextIOWrapper):
+def extract_sample_vqa(sample: dict, extractor: GPTExtractor, output_fd: TextIOWrapper):
     if sample["hallucination"]:
         norm_index = sample["preference"]
         hal_index = 3 - norm_index
@@ -37,14 +37,38 @@ def extract_sample(sample: dict, extractor: GPTExtractor, output_fd: TextIOWrapp
         output_fd.flush()
 
 
-def main():
-    with open(rlhf_data_path, "r") as f:
-        rlhf_data = json.load(f)
-    extractor = GPTExtractor()
+def extract_sample_caption(sample: str, extractor: GPTExtractor, output_fd: TextIOWrapper):
+    # image name ### caption */#
+    image_name, caption = sample.split(column_splitter)
+    if not caption:
+        return
+    rank = 0
+    if caption[-1] == "*":
+        caption = caption[:-1].strip()
+        rank = 1
+    elif caption[-1] == "#":
+        caption = caption[:-1].strip()
+        rank = -1
+    objects = extractor.extract(caption)
+    output_fd.write(column_splitter.join([image_name, str(rank), objects]) + "\n")
+
+
+def extract_vqa():
+    with open(vqa_data_path, "r") as f:
+        vqa_data = json.load(f)
+    extractor = GPTExtractor(vqa_prompt_path)
     with open(object_data_path, "a") as f:
-        resumable_fn(partial(extract_sample, extractor=extractor, output_fd=f), rlhf_data)
+        resumable_fn(partial(extract_sample_vqa, extractor=extractor, output_fd=f), vqa_data)
+
+
+def extract_caption():
+    with open(caption_data_path, "r") as f:
+        captions = f.read().splitlines()
+    extractor = GPTExtractor(caption_prompt_path)
+    with open(object_data_path, "a") as f:
+        resumable_fn(partial(extract_sample_caption, extractor=extractor, output_fd=f), captions)
 
 
 if __name__ == "__main__":
-    main()
+    extract_caption()
     # print(GPTExtractor().extract(open("tmp.txt", "r").read()))

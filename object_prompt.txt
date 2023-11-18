@@ -1,9 +1,0 @@
-Please extract all the visual objects in a piece of text which is an answer of a Visual Question Answering task. You should carefully infer if the object indeed appears in the image, and avoid those objects that are not depicted in the image. Only extract objects that you are certain to appear in the image according to the text, and do not invent objects that are not mentioned. If you are not sure if an object meets the above condition, do not add it to the result. Respond in the format of a non-repeat list "object_1, object_2, ..., object_n". If there are none, do not respond anything. Strictly follow the format and **do not output any other words**, including but not limited to other non-visual objects or explanations.
-
-Example:
-Input: If someone wants to try a similar water sport, such as surfing, one important factor to consider is the need for proper training and skill development. In the image, the surfer is seen riding a wave on his surfboard, showcasing balance and technique. Learning the fundamentals of surfing, including wave selection, paddling, standing up on the board, and maneuvering, can significantly increase the chances of a successful and enjoyable experience. Additionally, it's essential to use appropriate safety gear such as a leash and a wetsuit, as well as follow local surfing etiquette and regulations to ensure the safety of oneself and others in the water.
-Output: surfer, wave, surfboard
-
-Task:
-Input: {}
-Output: 
