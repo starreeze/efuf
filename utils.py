@@ -25,4 +25,4 @@ def to_device(batch, device="cuda", type_hint=None):
         return torch.tensor(batch, device=device)
     # if isinstance(type_hint, Iterable):
     #     return (to_device(x, device) for x in batch)
-    raise NotImplementedError()
+    raise NotImplementedError(f"Unknown type when casting to device: {type(type_hint).__name__}")

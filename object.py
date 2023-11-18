@@ -8,7 +8,7 @@ import json
 from io import TextIOWrapper
 from functools import partial
 from gpt import anychat_gpt_35, g4f_gpt_4
-from interrupt_wrapper import resumable
+from interrupt_wrapper import resumable_fn
 from args import *
 
 
@@ -42,7 +42,7 @@ def main():
         rlhf_data = json.load(f)
     extractor = GPTExtractor()
     with open(object_data_path, "a") as f:
-        resumable(partial(extract_sample, extractor=extractor, output_fd=f), rlhf_data)
+        resumable_fn(partial(extract_sample, extractor=extractor, output_fd=f), rlhf_data)
 
 
 if __name__ == "__main__":
