@@ -8,21 +8,21 @@ from __future__ import annotations
 import torch, numpy
 
 
-def to_device(batch, device="cuda", type_hint=None):
-    if type_hint is None:
-        type_hint = batch
+def to_device(batch, device="cuda"):
     if batch is None:
         return None
-    if isinstance(type_hint, dict):
+    try:
         return {k: to_device(v, device) for k, v in batch.items()}
-    if isinstance(type_hint, list):
+    except AttributeError:
+        pass
+    if isinstance(batch, list):
         return [to_device(x, device) for x in batch]
-    if isinstance(type_hint, tuple):
+    if isinstance(batch, tuple):
         return tuple(to_device(x, device) for x in batch)
-    if isinstance(type_hint, torch.Tensor):
+    if isinstance(batch, torch.Tensor):
         return batch.to(device)
-    if isinstance(type_hint, numpy.ndarray):
+    if isinstance(batch, numpy.ndarray):
         return torch.tensor(batch, device=device)
     # if isinstance(type_hint, Iterable):
     #     return (to_device(x, device) for x in batch)
-    raise NotImplementedError(f"Unknown type when casting to device: {type(type_hint).__name__}")
+    raise NotImplementedError(f"Unknown type when casting to device: {type(batch).__name__}")

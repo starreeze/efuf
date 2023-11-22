@@ -4,7 +4,7 @@
 """extract objects from the rlfh data (with hallucination only)"""
 
 from __future__ import annotations
-import json
+import json, re
 from io import TextIOWrapper
 from functools import partial
 from gpt import anychat_gpt_35, g4f_gpt_4
@@ -16,15 +16,22 @@ class GPTExtractor:
     def __init__(self, prompt_path, version=4) -> None:
         if version == 4:
             self.complete = partial(g4f_gpt_4, stream=False)
+            self.backup = anychat_gpt_35
         elif version == 35:
             self.complete = anychat_gpt_35
+            self.backup = partial(g4f_gpt_4, stream=False)
         else:
             raise NotImplementedError()
         with open(prompt_path, "r") as f:
             self.prompt = f.read()
 
     def extract(self, inputs: str) -> str:
-        return self.complete([{"role": "user", "content": self.prompt.format(inputs)}])  # type:ignore
+        response = self.complete([{"role": "user", "content": self.prompt.format(inputs)}])  # type:ignore
+        if "i'm sorry" in response.lower():  # type:ignore
+            response = self.backup([{"role": "user", "content": self.prompt.format(inputs)}])  # type:ignore
+        if "i'm sorry" in response.lower():  # type:ignore
+            raise ValueError("gpt not willing to respond.")
+        return response  # type:ignore
 
 
 def extract_sample_vqa(sample: dict, extractor: GPTExtractor, output_fd: TextIOWrapper):
@@ -42,6 +49,7 @@ def extract_sample_caption(sample: str, extractor: GPTExtractor, output_fd: Text
     image_name, caption = sample.split(column_splitter)
     if not caption:
         return
+
     rank = 0
     if caption[-1] == "*":
         caption = caption[:-1].strip()
@@ -49,8 +57,17 @@ def extract_sample_caption(sample: str, extractor: GPTExtractor, output_fd: Text
     elif caption[-1] == "#":
         caption = caption[:-1].strip()
         rank = -1
-    objects = extractor.extract(caption)
-    output_fd.write(column_splitter.join([image_name, str(rank), objects]) + "\n")
+
+    objects_str = extractor.extract(caption).strip(',.:;"')
+    objects = objects_str.split(object_splitter)
+    objects_brackets = []
+    for obj in objects:
+        match = re.search(r"\[(\w )*" + obj + r"( \w)*\]", caption)
+        objects_brackets.append(match.group(0) if match else obj)
+    objects_str = object_splitter.join(objects_brackets)
+
+    output_fd.write(column_splitter.join([image_name, str(rank), objects_str]) + "\n")
+    output_fd.flush()
 
 
 def extract_vqa():

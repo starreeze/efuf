@@ -9,11 +9,12 @@ from typing import Any, Callable, Sequence
 
 
 class ResumeWrapper:
-    def __init__(self, data: Sequence, bar=True, total_items=None, checkpoint_path="checkpoint.pkl"):
+    def __init__(self, data: Sequence, restart=False, bar=True, total_items=None, checkpoint_path="checkpoint.pkl"):
         self.data = data
         total_items = total_items if total_items is not None else len(data)
         self.checkpoint_path = checkpoint_path
-
+        if restart:
+            os.remove(checkpoint_path)
         try:
             with open(checkpoint_path, "rb") as checkpoint_file:
                 checkpoint = pickle.load(checkpoint_file)
@@ -46,11 +47,19 @@ class ResumeWrapper:
 
 
 def resumable_fn(
-    func: Callable[[Any], None], data: Sequence, retry=5, bar=True, total_items=None, checkpoint_path="checkpoint.pkl"
+    func: Callable[[Any], None],
+    data: Sequence,
+    restart=False,
+    retry=5,
+    bar=True,
+    total_items=None,
+    checkpoint_path="checkpoint.pkl",
 ) -> None:
     if total_items is None:
         total_items = len(data)
     checkpoint = 0
+    if restart:
+        os.remove(checkpoint_path)
     try:
         with open(checkpoint_path, "rb") as checkpoint_file:
             checkpoint = pickle.load(checkpoint_file)
@@ -68,6 +77,7 @@ def resumable_fn(
             try:
                 func(item)
             except KeyboardInterrupt:
+                traceback.print_exc()
                 exit(1)
             except Exception as e:
                 if j == retry - 1:
