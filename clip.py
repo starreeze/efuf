@@ -3,6 +3,7 @@
 # @Author  : Shangyu.Xing (starreeze@foxmail.com)
 
 from __future__ import annotations
+from abc import abstractmethod
 import os, torch
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
@@ -10,7 +11,7 @@ import numpy as np
 from PIL import Image
 from matplotlib import pyplot as plt
 from transformers import CLIPProcessor, CLIPModel
-from args import *
+from args import args
 from utils import to_device
 
 # SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -18,7 +19,7 @@ from utils import to_device
 
 
 num_workers = 0
-data_source = "caption-fine"
+data_source = "caption-ftfi"
 
 
 class ObjectData(Dataset):
@@ -32,14 +33,18 @@ class ObjectData(Dataset):
     def __len__(self):
         return len(self.objects)
 
+    @abstractmethod
+    def __getitem__(self, index):
+        pass
+
     @staticmethod
     def format_prompt(object_str: str) -> str:
-        objects = object_str.split(object_splitter)
+        objects = object_str.split(args.object_splitter)
         if max([len(obj.split(" ")) for obj in objects]) > 10:
             return ""
-        return clip_prompt + object_str.replace("[", "").replace("]", "") + "."
+        return args.clip_prompt + object_str.replace("[", "").replace("]", "") + "."
 
-    def construct_data(self, image, text):
+    def construct_single_pair(self, image, text):
         if text:
             return self.processor(text=text, images=image, return_tensors="pt")
         return None
@@ -52,44 +57,67 @@ class ObjectData(Dataset):
 class VqaObjectData(ObjectData):
     """return: preprocessed pair of hal and norm"""
 
-    def __init__(self, processor, image_dir, object_path):
-        super().__init__(processor, image_dir, object_path)
-
     def __getitem__(self, idx: int):
-        image, hal_obj, norm_obj = self.objects[idx].split(column_splitter)
+        image, hal_obj, norm_obj = self.objects[idx].split(args.column_splitter)
         hal_obj, norm_obj = self.format_prompt(hal_obj), self.format_prompt(norm_obj)
-        image = Image.open(os.path.join(image_dir_path, image_prefix + image))
-        return self.construct_data(image, hal_obj), self.construct_data(image, norm_obj)
+        image = Image.open(os.path.join(args.image_dir_path, args.image_prefix + image)).convert("RGB")
+        return self.construct_single_pair(image, hal_obj), self.construct_single_pair(image, norm_obj)
 
 
-class CaptionCoarseObjectData(ObjectData):
+class CaptionCTCIData(ObjectData):  # coarse text coarse image
     """return: preprocessed pair, if contains hal"""
 
-    def __init__(self, processor, image_dir, object_path):
-        super().__init__(processor, image_dir, object_path)
-
     def __getitem__(self, idx: int):
-        image, rank, objects = self.objects[idx].split(column_splitter)
+        image, rank, objects = self.objects[idx].split(args.column_splitter)
         hal = "[" in objects
         object_desc = self.format_prompt(objects)
-        image = Image.open(os.path.join(image_dir_path, image))
-        return self.construct_data(image, object_desc), hal
+        image = Image.open(os.path.join(args.image_dir_path, image)).convert("RGB")
+        return self.construct_single_pair(image, object_desc), hal
 
 
-class CaptionFineObjectData(ObjectData):
-    """return: preprocessed text and images, a boolean list indicating whether hal"""
-
-    def __init__(self, processor, image_dir, object_path):
-        super().__init__(processor, image_dir, object_path)
-
-    def __getitem__(self, idx: int):
-        image, rank, objects = self.objects[idx].split(column_splitter)
-        objects = objects.split(object_splitter)
+class CaptionFTData(ObjectData):  # fine text
+    def get_sample_data(self, idx: int):
+        """return: image, object descriptions, hal"""
+        image, rank, objects = self.objects[idx].split(args.column_splitter)
+        objects = objects.split(args.object_splitter)
         hals = [obj[0] == "[" for obj in objects]
         object_descs = [self.format_prompt(obj.strip("[]")) for obj in objects]
-        image = Image.open(os.path.join(image_dir_path, image))
+        image = Image.open(os.path.join(args.image_dir_path, image)).convert("RGB")
+        return image, object_descs, hals
+
+
+class CaptionFTCIData(CaptionFTData):  # fine text coarse image
+    """return: preprocessed text and images, a boolean list indicating whether hal"""
+
+    def __getitem__(self, idx: int):
+        image, object_descs, hals = self.get_sample_data(idx)
         processed = self.processor(text=object_descs, images=image, return_tensors="pt", padding=True)
         return processed, hals
+
+
+class CaptionFTFIData(CaptionFTData):  # fine text fine image
+    """
+    return: preprocessed text and images, a boolean list indicating whether hal,
+    and a mask indicating how many times a patch is calculated
+    """
+
+    def __getitem__(self, idx: int):
+        image, object_descs, hals = self.get_sample_data(idx)
+        image = np.asarray(image)  # W, H, C
+        images = []
+        num_patches = (np.asarray(image.shape[:2]) + args.patch_size - 1) // args.patch_size
+        patch_mask = torch.zeros(*num_patches, dtype=torch.int32)
+        window_pixel = args.window_size * args.patch_size
+        for w in range(num_patches[0] - args.window_size + 1):
+            w_p = w * args.patch_size
+            for h in range(num_patches[1] - args.window_size + 1):
+                h_p = h * args.patch_size
+                images.append(image[w_p : w_p + window_pixel, h_p : h_p + window_pixel])
+                patch_mask[w : w + args.window_size, h : h + args.window_size] += 1
+        if not images:
+            return None
+        processed = self.processor(text=object_descs, images=images, return_tensors="pt", padding=True)
+        return processed, hals, patch_mask
 
 
 class ClipInfer:
@@ -100,10 +128,11 @@ class ClipInfer:
         if inputs is None:
             return -1
         inputs = to_device(inputs)
-        output = self.model(**inputs)["logits_per_image"][0]  # type: ignore
-        if len(output) == 1:
-            return float(output[0])
-        return output
+        output: torch.Tensor = self.model(**inputs)["logits_per_image"]  # type: ignore
+        output = output.squeeze()
+        if output.shape == ():
+            return output.item()
+        return output.to("cpu")
 
     def infer_vqa(self, dataset: VqaObjectData):
         data = DataLoader(dataset, 1, shuffle=False, num_workers=num_workers, collate_fn=dataset.collate_fn)
@@ -114,7 +143,7 @@ class ClipInfer:
                 norms.append(self.process_sample(batch[1]))
         return hals, norms
 
-    def infer_caption_coarse(self, dataset: CaptionCoarseObjectData):
+    def infer_caption_CTCI(self, dataset: CaptionCTCIData):
         data = DataLoader(dataset, 1, shuffle=False, num_workers=num_workers, collate_fn=dataset.collate_fn)
         scores = ([], [])
         with torch.no_grad():
@@ -122,7 +151,7 @@ class ClipInfer:
                 scores[1 - batch[1]].append(self.process_sample(batch[0]))
         return scores  # hals, norms
 
-    def infer_caption_fine(self, dataset: CaptionFineObjectData):
+    def infer_caption_FTCI(self, dataset: CaptionFTCIData):
         data = DataLoader(dataset, 1, shuffle=False, num_workers=num_workers, collate_fn=dataset.collate_fn)
         scores = ([], [])
         with torch.no_grad():
@@ -130,7 +159,28 @@ class ClipInfer:
                 results = self.process_sample(batch[0])
                 for score, hal in zip(results, batch[1]):  # type: ignore
                     scores[1 - hal].append(score)
-        return to_device(scores, "cpu")  # hals, norms
+        return scores  # hals, norms
+
+    def infer_caption_FTFI(self, dataset: CaptionFTFIData):
+        data = DataLoader(dataset, 1, shuffle=False, num_workers=num_workers, collate_fn=dataset.collate_fn)
+        scores = ([], [])
+        with torch.no_grad():
+            for batch in tqdm(data):
+                if batch is None:
+                    continue
+                mask: torch.Tensor = batch[2]
+                # after reshape: [W, H, num_objects]
+                results: torch.Tensor = self.process_sample(batch[0])  # type: ignore
+                results = results.reshape(*(torch.tensor(mask.shape) - args.window_size + 1), -1)
+                patch_score = torch.zeros(*mask.shape, results.shape[-1])
+                for w in range(results.shape[0]):
+                    for h in range(results.shape[1]):
+                        patch_score[w : w + args.window_size, h : h + args.window_size] += results[w, h]
+                patch_score = (patch_score / mask.unsqueeze(2).expand(-1, -1, results.shape[-1])).permute(2, 0, 1)
+                assert patch_score.shape[0] == len(batch[1])
+                for score, hal in zip(patch_score, batch[1]):  # type: ignore
+                    scores[1 - hal].append(score.max())
+        return scores  # hals, norms
 
 
 def plot_histogram(hal, norm, filename="result.png", bins=np.arange(0, 1, 0.05)):
@@ -141,44 +191,53 @@ def plot_histogram(hal, norm, filename="result.png", bins=np.arange(0, 1, 0.05))
     plt.savefig(filename)
 
 
-def main():
-    if not os.path.exists(hal_result_path):
+def infer_object_image():
+    if not os.path.exists(args.hal_result_path) or args.restart:
         processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32", local_files_only=True)
         clip = ClipInfer()
         if data_source == "vqa":
-            dataset = VqaObjectData(processor, image_dir_path, object_data_path)
+            dataset = VqaObjectData(processor, args.image_dir_path, args.object_data_path)
             hals, norms = clip.infer_vqa(dataset)
-        elif data_source == "caption-coarse":
-            dataset = CaptionCoarseObjectData(processor, image_dir_path, object_data_path)
-            hals, norms = clip.infer_caption_coarse(dataset)
-        elif data_source == "caption-fine":
-            dataset = CaptionFineObjectData(processor, image_dir_path, object_data_path)
-            hals, norms = clip.infer_caption_fine(dataset)  # type: ignore
+        elif data_source == "caption-ctci":
+            dataset = CaptionCTCIData(processor, args.image_dir_path, args.object_data_path)
+            hals, norms = clip.infer_caption_CTCI(dataset)
+        elif data_source == "caption-ftci":
+            dataset = CaptionFTCIData(processor, args.image_dir_path, args.object_data_path)
+            hals, norms = clip.infer_caption_FTCI(dataset)  # type: ignore
+        elif data_source == "caption-ftfi":
+            dataset = CaptionFTFIData(processor, args.image_dir_path, args.object_data_path)
+            hals, norms = clip.infer_caption_FTFI(dataset)  # type: ignore
         else:
             raise NotImplementedError()
-        np.save(hal_result_path, np.array(hals))
-        np.save(norm_result_path, np.array(norms))
+        np.save(args.hal_result_path, np.array(hals))
+        np.save(args.norm_result_path, np.array(norms))
 
-    hal, norm = np.load(hal_result_path), np.load(norm_result_path)
+    hal, norm = np.load(args.hal_result_path), np.load(args.norm_result_path)
     hal[hal == -1] = np.nan
     norm[norm == -1] = np.nan
     normalize = lambda x, total: (x - np.nanmin(total)) / (np.nanmax(total) - np.nanmin(total))
     total = np.concatenate([hal, norm], axis=0)
     hal = normalize(hal, total)
     norm = normalize(norm, total)
-    print(f"hal: mean {np.nanmean(hal)} std: {np.nanstd(hal)}")
-    print(f"norm: mean {np.nanmean(norm)} std: {np.nanstd(norm)}")
+    hal_mean = np.nanmean(hal)
+    hal_std = np.nanstd(hal)
+    norm_mean = np.nanmean(norm)
+    norm_std = np.nanstd(norm)
+    all_std = np.nanstd(total)
+    print(f"hal: mean {hal_mean} std: {hal_std}")
+    print(f"norm: mean {norm_mean} std: {norm_std}")
 
     min_len = min(len(hal), len(norm))
-    plot_histogram(hal[:min_len], norm[:min_len])
+    plot_histogram(hal[:min_len], norm[:min_len], filename=f"p{args.patch_size}-w{args.window_size}")
+    return hal_mean, norm_mean, all_std
 
 
 def test_run(image, text: str):
-    image = Image.open(os.path.join(image_dir_path, image_prefix + image))
+    image = Image.open(os.path.join(args.image_dir_path, args.image_prefix + image))
     processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32", local_files_only=True)
     inputs = processor(text=text, images=image, return_tensors="pt")
     print(ClipInfer().process_sample(inputs))
 
 
 if __name__ == "__main__":
-    main()
+    infer_object_image()

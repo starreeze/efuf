@@ -2,16 +2,29 @@
 # @Date    : 2023-10-26 19:51:58
 # @Author  : Shangyu.Xing (starreeze@foxmail.com)
 
-## data
-vqa_prompt_path = "dataset/vqa_prompt.txt"
-vqa_data_path = "dataset/rlhf.json"
-caption_prompt_path = "dataset/caption_prompt.txt"
-caption_data_path = "dataset/captions.txt"
-object_data_path = "dataset/objects.txt"
-image_dir_path = "dataset/images"
-hal_result_path = "dataset/hal.npy"
-norm_result_path = "dataset/norm.npy"
-column_splitter = " ### "
-object_splitter = ", "
-clip_prompt = "A photo containing "
-image_prefix = "COCO_train2014_"
+import argparse
+
+parser = argparse.ArgumentParser()
+# data
+## path
+parser.add_argument("--vqa_prompt_path", type=str, default="dataset/vqa_prompt.txt")
+parser.add_argument("--vqa_data_path", type=str, default="dataset/rlhf.json")
+parser.add_argument("--caption_prompt_path", type=str, default="dataset/caption_prompt.txt")
+parser.add_argument("--caption_data_path", type=str, default="dataset/captions.txt")
+parser.add_argument("--object_data_path", type=str, default="dataset/objects.txt")
+parser.add_argument("--image_dir_path", type=str, default="dataset/images")
+parser.add_argument("--hal_result_path", type=str, default="dataset/hal.npy")
+parser.add_argument("--image_prefix", type=str, default="COCO_train2014_")
+parser.add_argument("--norm_result_path", type=str, default="dataset/norm.npy")
+## text
+parser.add_argument("--column_splitter", type=str, default=" ### ")
+parser.add_argument("--object_splitter", type=str, default=", ")
+parser.add_argument("--clip_prompt", type=str, default="A photo containing ")
+## image
+parser.add_argument("--patch_size", type=int, default=32)
+parser.add_argument("--window_size", type=int, default=8)  # number of patches
+
+# control
+parser.add_argument("--restart", action="store_true")
+
+args = parser.parse_args()
