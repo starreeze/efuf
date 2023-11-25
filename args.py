@@ -16,13 +16,16 @@ parser.add_argument("--image_dir_path", type=str, default="dataset/images")
 parser.add_argument("--hal_result_path", type=str, default="dataset/hal.npy")
 parser.add_argument("--image_prefix", type=str, default="COCO_train2014_")
 parser.add_argument("--norm_result_path", type=str, default="dataset/norm.npy")
-## text
+## format
 parser.add_argument("--column_splitter", type=str, default=" ### ")
 parser.add_argument("--object_splitter", type=str, default=", ")
 parser.add_argument("--clip_prompt", type=str, default="A photo containing ")
-## image
+## model
 parser.add_argument("--patch_size", type=int, default=32)
 parser.add_argument("--window_size", type=int, default=8)  # number of patches
+parser.add_argument("--average_top_k", type=int, default=4)
+
+parser.add_argument("--least_data_size", type=int, default=50)
 
 # control
 parser.add_argument("--restart", action="store_true")

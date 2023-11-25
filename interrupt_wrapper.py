@@ -4,26 +4,43 @@
 """wrapper on a list to allow interruption and resume"""
 
 from __future__ import annotations
-import os, pickle, traceback
-from typing import Any, Callable, Sequence
+import os, traceback
+from typing import Any, Callable, Iterable, Sequence
+from itertools import product
 
 
+# wrap some iterables, no retrying
 class ResumeWrapper:
-    def __init__(self, data: Sequence, restart=False, bar=True, total_items=None, checkpoint_path="checkpoint.pkl"):
-        self.data = data
-        total_items = total_items if total_items is not None else len(data)
+    def __init__(
+        self,
+        *data: Iterable,
+        mode="product",
+        restart=False,
+        bar=0,  # if -1 no bar at all
+        total_items=None,
+        checkpoint_path="checkpoint_ir",
+    ):
+        if mode == "product":
+            self.data = list(product(*data))
+        elif mode == "zip":
+            self.data = list(zip(*data))
+        else:
+            raise ValueError("mode must be 'product' or 'zip'")
+        total_items = total_items if total_items is not None else len(self.data)
         self.checkpoint_path = checkpoint_path
         if restart:
             os.remove(checkpoint_path)
         try:
-            with open(checkpoint_path, "rb") as checkpoint_file:
-                checkpoint = pickle.load(checkpoint_file)
+            with open(checkpoint_path, "r") as checkpoint_file:
+                checkpoint = int(checkpoint_file.read().strip())
         except FileNotFoundError:
             checkpoint = 0
-        if bar:
+        if bar >= 0:
             from tqdm import tqdm
 
-            self.wrapped_range = tqdm(range(checkpoint, total_items), initial=checkpoint, total=total_items)
+            self.wrapped_range = tqdm(
+                range(checkpoint, total_items), initial=checkpoint, total=total_items, position=bar
+            )
         else:
             self.wrapped_range = range(checkpoint, total_items)
         self.wrapped_iter = iter(self.wrapped_range)
@@ -33,8 +50,8 @@ class ResumeWrapper:
         return self
 
     def __next__(self):
-        with open(self.checkpoint_path, "wb") as checkpoint_file:
-            pickle.dump(self.index, checkpoint_file)
+        with open(self.checkpoint_path, "w") as checkpoint_file:
+            checkpoint_file.write(str(self.index))
         try:
             self.index = next(self.wrapped_iter)
         except StopIteration:
@@ -46,6 +63,7 @@ class ResumeWrapper:
         return self.data[self.index]
 
 
+# need hand-crafted function but support retrying
 def resumable_fn(
     func: Callable[[Any], None],
     data: Sequence,
@@ -61,8 +79,8 @@ def resumable_fn(
     if restart:
         os.remove(checkpoint_path)
     try:
-        with open(checkpoint_path, "rb") as checkpoint_file:
-            checkpoint = pickle.load(checkpoint_file)
+        with open(checkpoint_path, "r") as checkpoint_file:
+            checkpoint = int(checkpoint_file.read().strip())
     except FileNotFoundError:
         pass
     if bar:
@@ -87,8 +105,8 @@ def resumable_fn(
                 print(f"{type(e).__name__}: {e}, retrying [{j + 1}]...")
             else:
                 break
-        with open(checkpoint_path, "wb") as checkpoint_file:
-            pickle.dump(i + 1, checkpoint_file)
+        with open(checkpoint_path, "w") as checkpoint_file:
+            checkpoint_file.write(str(i + 1))
     try:
         os.remove(checkpoint_path)
     except FileNotFoundError:

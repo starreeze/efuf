@@ -134,38 +134,38 @@ class ClipInfer:
             return output.item()
         return output.to("cpu")
 
-    def infer_vqa(self, dataset: VqaObjectData):
+    def infer_vqa(self, dataset: VqaObjectData, bar_position=0):
         data = DataLoader(dataset, 1, shuffle=False, num_workers=num_workers, collate_fn=dataset.collate_fn)
         hals, norms = [], []
         with torch.no_grad():
-            for batch in tqdm(data):
+            for batch in tqdm(data, position=bar_position):
                 hals.append(self.process_sample(batch[0]))
                 norms.append(self.process_sample(batch[1]))
         return hals, norms
 
-    def infer_caption_CTCI(self, dataset: CaptionCTCIData):
+    def infer_caption_CTCI(self, dataset: CaptionCTCIData, bar_position=0):
         data = DataLoader(dataset, 1, shuffle=False, num_workers=num_workers, collate_fn=dataset.collate_fn)
         scores = ([], [])
         with torch.no_grad():
-            for batch in tqdm(data):
+            for batch in tqdm(data, position=bar_position):
                 scores[1 - batch[1]].append(self.process_sample(batch[0]))
         return scores  # hals, norms
 
-    def infer_caption_FTCI(self, dataset: CaptionFTCIData):
+    def infer_caption_FTCI(self, dataset: CaptionFTCIData, bar_position=0):
         data = DataLoader(dataset, 1, shuffle=False, num_workers=num_workers, collate_fn=dataset.collate_fn)
         scores = ([], [])
         with torch.no_grad():
-            for batch in tqdm(data):
+            for batch in tqdm(data, position=bar_position):
                 results = self.process_sample(batch[0])
                 for score, hal in zip(results, batch[1]):  # type: ignore
                     scores[1 - hal].append(score)
         return scores  # hals, norms
 
-    def infer_caption_FTFI(self, dataset: CaptionFTFIData):
+    def infer_caption_FTFI(self, dataset: CaptionFTFIData, bar_position=0):
         data = DataLoader(dataset, 1, shuffle=False, num_workers=num_workers, collate_fn=dataset.collate_fn)
         scores = ([], [])
         with torch.no_grad():
-            for batch in tqdm(data):
+            for batch in tqdm(data, position=bar_position):
                 if batch is None:
                     continue
                 mask: torch.Tensor = batch[2]
@@ -179,7 +179,9 @@ class ClipInfer:
                 patch_score = (patch_score / mask.unsqueeze(2).expand(-1, -1, results.shape[-1])).permute(2, 0, 1)
                 assert patch_score.shape[0] == len(batch[1])
                 for score, hal in zip(patch_score, batch[1]):  # type: ignore
-                    scores[1 - hal].append(score.max())
+                    score = score.reshape(-1)
+                    score = score[score.topk(args.average_top_k)[1]].mean()
+                    scores[1 - hal].append(score)
         return scores  # hals, norms
 
 
@@ -189,24 +191,25 @@ def plot_histogram(hal, norm, filename="result.png", bins=np.arange(0, 1, 0.05))
     plt.hist(hal, bins=bins, color="red", edgecolor="black", alpha=0.5)  # type: ignore
     plt.hist(norm, bins=bins, color="blue", edgecolor="black", alpha=0.5)  # type: ignore
     plt.savefig(filename)
+    plt.close()
 
 
-def infer_object_image():
+def infer_object_image(bar_position=0):
     if not os.path.exists(args.hal_result_path) or args.restart:
         processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32", local_files_only=True)
         clip = ClipInfer()
         if data_source == "vqa":
             dataset = VqaObjectData(processor, args.image_dir_path, args.object_data_path)
-            hals, norms = clip.infer_vqa(dataset)
+            hals, norms = clip.infer_vqa(dataset, bar_position)
         elif data_source == "caption-ctci":
             dataset = CaptionCTCIData(processor, args.image_dir_path, args.object_data_path)
-            hals, norms = clip.infer_caption_CTCI(dataset)
+            hals, norms = clip.infer_caption_CTCI(dataset, bar_position)
         elif data_source == "caption-ftci":
             dataset = CaptionFTCIData(processor, args.image_dir_path, args.object_data_path)
-            hals, norms = clip.infer_caption_FTCI(dataset)  # type: ignore
+            hals, norms = clip.infer_caption_FTCI(dataset, bar_position)  # type: ignore
         elif data_source == "caption-ftfi":
             dataset = CaptionFTFIData(processor, args.image_dir_path, args.object_data_path)
-            hals, norms = clip.infer_caption_FTFI(dataset)  # type: ignore
+            hals, norms = clip.infer_caption_FTFI(dataset, bar_position)  # type: ignore
         else:
             raise NotImplementedError()
         np.save(args.hal_result_path, np.array(hals))
@@ -215,6 +218,9 @@ def infer_object_image():
     hal, norm = np.load(args.hal_result_path), np.load(args.norm_result_path)
     hal[hal == -1] = np.nan
     norm[norm == -1] = np.nan
+    if hal.shape[0] < args.least_data_size or norm.shape[0] < args.least_data_size:
+        print("Not enough data to display")
+        return 0, 0, 0
     normalize = lambda x, total: (x - np.nanmin(total)) / (np.nanmax(total) - np.nanmin(total))
     total = np.concatenate([hal, norm], axis=0)
     hal = normalize(hal, total)
@@ -223,12 +229,15 @@ def infer_object_image():
     hal_std = np.nanstd(hal)
     norm_mean = np.nanmean(norm)
     norm_std = np.nanstd(norm)
-    all_std = np.nanstd(total)
+    all_std = np.nanstd(np.concatenate([hal, norm], axis=0))
+
+    identifier = f"p{args.patch_size:03d}-w{args.window_size:02d}-a{args.average_top_k:02d}"
+    print(identifier)
     print(f"hal: mean {hal_mean} std: {hal_std}")
     print(f"norm: mean {norm_mean} std: {norm_std}")
 
     min_len = min(len(hal), len(norm))
-    plot_histogram(hal[:min_len], norm[:min_len], filename=f"p{args.patch_size}-w{args.window_size}")
+    plot_histogram(hal[:min_len], norm[:min_len], filename=identifier)
     return hal_mean, norm_mean, all_std
 
 
