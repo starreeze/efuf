@@ -7,9 +7,9 @@ from __future__ import annotations
 import json, re
 from io import TextIOWrapper
 from functools import partial
-from gpt import anychat_gpt_35, g4f_gpt_4
-from interrupt_wrapper import resumable_fn
-from args import *
+from common.gpt import anychat_gpt_35, g4f_gpt_4
+from common.interrupt_wrapper import resumable_fn
+from common.args import args
 
 
 class GPTExtractor:

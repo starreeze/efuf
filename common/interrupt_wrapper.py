@@ -20,7 +20,9 @@ class ResumeWrapper:
         total_items=None,
         checkpoint_path="checkpoint_ir",
     ):
-        if mode == "product":
+        if len(data) == 1:
+            self.data = list(data[0])
+        elif mode == "product":
             self.data = list(product(*data))
         elif mode == "zip":
             self.data = list(zip(*data))

@@ -4,19 +4,19 @@
 
 from __future__ import annotations
 from abc import abstractmethod
-import os, torch
+import os, sys, torch
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 import numpy as np
 from PIL import Image
 from matplotlib import pyplot as plt
+from scipy.stats import ttest_ind
 from transformers import CLIPProcessor, CLIPModel
-from args import args
-from utils import to_device
 
-# SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-# sys.path.append(os.path.dirname(SCRIPT_DIR))
-
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(SCRIPT_DIR))
+from common.args import args
+from common.utils import to_device
 
 num_workers = 0
 data_source = "caption-ftfi"
@@ -185,7 +185,7 @@ class ClipInfer:
         return scores  # hals, norms
 
 
-def plot_histogram(hal, norm, filename="result.png", bins=np.arange(0, 1, 0.05)):
+def plot_histogram(hal, norm, filename="result.png", bins=np.arange(15, 40, 1)):
     hal = hal[hal != np.nan]
     norm = norm[norm != np.nan]
     plt.hist(hal, bins=bins, color="red", edgecolor="black", alpha=0.5)  # type: ignore
@@ -194,7 +194,7 @@ def plot_histogram(hal, norm, filename="result.png", bins=np.arange(0, 1, 0.05))
     plt.close()
 
 
-def infer_object_image(bar_position=0):
+def infer_object_image(bar_position=0, plot=True):
     if not os.path.exists(args.hal_result_path) or args.restart:
         processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32", local_files_only=True)
         clip = ClipInfer()
@@ -219,26 +219,32 @@ def infer_object_image(bar_position=0):
     hal[hal == -1] = np.nan
     norm[norm == -1] = np.nan
     if hal.shape[0] < args.least_data_size or norm.shape[0] < args.least_data_size:
-        print("Not enough data to display")
-        return 0, 0, 0
-    normalize = lambda x, total: (x - np.nanmin(total)) / (np.nanmax(total) - np.nanmin(total))
-    total = np.concatenate([hal, norm], axis=0)
-    hal = normalize(hal, total)
-    norm = normalize(norm, total)
+        tqdm.write("Not enough data to display")
+        return 0, 0, 0, 0, 0
     hal_mean = np.nanmean(hal)
     hal_std = np.nanstd(hal)
     norm_mean = np.nanmean(norm)
     norm_std = np.nanstd(norm)
     all_std = np.nanstd(np.concatenate([hal, norm], axis=0))
+    p_value_all = ttest_ind(hal, norm).pvalue
 
     identifier = f"p{args.patch_size:03d}-w{args.window_size:02d}-a{args.average_top_k:02d}"
-    print(identifier)
-    print(f"hal: mean {hal_mean} std: {hal_std}")
-    print(f"norm: mean {norm_mean} std: {norm_std}")
-
+    tqdm.write(identifier)
+    tqdm.write(f"hal: mean {hal_mean} std: {hal_std}")
+    tqdm.write(f"norm: mean {norm_mean} std: {norm_std}")
+    tqdm.write(f"p-value-all: {p_value_all}")
     min_len = min(len(hal), len(norm))
-    plot_histogram(hal[:min_len], norm[:min_len], filename=identifier)
-    return hal_mean, norm_mean, all_std
+    if args.sample_policy == "random":
+        np.random.seed(args.seed)
+        hal, norm = np.random.choice(hal, min_len), np.random.choice(norm, min_len)
+    elif args.sample_policy == "max":
+        hal = np.sort(hal)[:min_len]
+        norm = np.sort(norm)[-min_len:]
+    p_value_hist = ttest_ind(hal, norm).pvalue
+    tqdm.write(f"p-value-hist: {p_value_hist}")
+    if plot:
+        plot_histogram(hal[:min_len], norm[:min_len], filename=identifier)
+    return hal_mean, norm_mean, all_std, p_value_all, p_value_hist
 
 
 def test_run(image, text: str):
