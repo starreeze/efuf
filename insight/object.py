@@ -4,9 +4,12 @@
 """extract objects from the rlfh data (with hallucination only)"""
 
 from __future__ import annotations
-import json, re
+import json, re, os, sys
 from io import TextIOWrapper
 from functools import partial
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(SCRIPT_DIR))
 from common.gpt import anychat_gpt_35, g4f_gpt_4
 from common.interrupt_wrapper import resumable_fn
 from common.args import args
@@ -44,12 +47,8 @@ def extract_sample_vqa(sample: dict, extractor: GPTExtractor, output_fd: TextIOW
         output_fd.flush()
 
 
-def extract_sample_caption(sample: str, extractor: GPTExtractor, output_fd: TextIOWrapper):
-    # image name ### caption */#
+def get_caption_info(sample: str):
     image_name, caption = sample.split(args.column_splitter)
-    if not caption:
-        return
-
     rank = 0
     if caption[-1] == "*":
         caption = caption[:-1].strip()
@@ -57,8 +56,17 @@ def extract_sample_caption(sample: str, extractor: GPTExtractor, output_fd: Text
     elif caption[-1] == "#":
         caption = caption[:-1].strip()
         rank = -1
+    return image_name, caption, rank
 
-    objects_str = extractor.extract(caption).strip(',.:;"')
+
+def extract_sample_caption(sample: str, extractor: GPTExtractor, output_fd: TextIOWrapper):
+    # image name ### caption */#
+    image_name, caption, rank = get_caption_info(sample)
+    assert caption
+    objects_str = extractor.extract(caption)
+    # sometimes LLM will not follow the format and output "the objects in the image are: xxx, xxx..."
+    # we should filter its description which is usually ends with :
+    objects_str = objects_str[objects_str.find(":") + 1 :].strip(args.subsentence_splitter_set + "'\"")
     objects = objects_str.split(args.object_splitter)
     objects_brackets = []
     for obj in objects:

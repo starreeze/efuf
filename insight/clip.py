@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Date    : 2023-02-02 10:22:49
+# @Date    : 2023-11-22 10:22:49
 # @Author  : Shangyu.Xing (starreeze@foxmail.com)
 
 from __future__ import annotations
@@ -176,12 +176,14 @@ class ClipInfer:
                 for w in range(results.shape[0]):
                     for h in range(results.shape[1]):
                         patch_score[w : w + args.window_size, h : h + args.window_size] += results[w, h]
-                patch_score = (patch_score / mask.unsqueeze(2).expand(-1, -1, results.shape[-1])).permute(2, 0, 1)
-                assert patch_score.shape[0] == len(batch[1])
-                for score, hal in zip(patch_score, batch[1]):  # type: ignore
-                    score = score.reshape(-1)
-                    score = score[score.topk(args.average_top_k)[1]].mean()
-                    scores[1 - hal].append(score)
+                patch_score = patch_score / mask.unsqueeze(2).expand(-1, -1, results.shape[-1])
+                s = patch_score.shape
+                patch_score = patch_score.reshape(s[0] * s[1], s[2]).transpose(0, 1)
+                obj_score = torch.mean(patch_score.topk(args.average_top_k, dim=-1)[0], dim=-1)
+                scores[0].append(np.empty([0]))
+                scores[1].append(np.empty([0]))
+                for score, hal in zip(obj_score, batch[1]):  # type: ignore
+                    scores[1 - hal][-1].append(float(score))
         return scores  # hals, norms
 
 
@@ -215,7 +217,7 @@ def infer_object_image(bar_position=0, plot=True):
         np.save(args.hal_result_path, np.array(hals))
         np.save(args.norm_result_path, np.array(norms))
 
-    hal, norm = np.load(args.hal_result_path), np.load(args.norm_result_path)
+    hal, norm = np.concatenate(np.load(args.hal_result_path)), np.concatenate(np.load(args.norm_result_path))
     hal[hal == -1] = np.nan
     norm[norm == -1] = np.nan
     if hal.shape[0] < args.least_data_size or norm.shape[0] < args.least_data_size:

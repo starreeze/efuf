@@ -3,6 +3,10 @@
 # @Author  : Shangyu.Xing (starreeze@foxmail.com)
 
 from __future__ import annotations
+import os, sys
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(SCRIPT_DIR))
 from common.args import args
 from insight.clip import infer_object_image
 from common.interrupt_wrapper import ResumeWrapper
