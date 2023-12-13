@@ -217,7 +217,8 @@ def infer_object_image(bar_position=0, plot=True):
         np.save(args.hal_result_path, np.array(hals))
         np.save(args.norm_result_path, np.array(norms))
 
-    hal, norm = np.concatenate(np.load(args.hal_result_path)), np.concatenate(np.load(args.norm_result_path))
+    hal = np.concatenate(np.load(args.hal_result_path, allow_pickle=True))
+    norm = np.concatenate(np.load(args.norm_result_path, allow_pickle=True))
     hal[hal == -1] = np.nan
     norm[norm == -1] = np.nan
     if hal.shape[0] < args.least_data_size or norm.shape[0] < args.least_data_size:

@@ -27,10 +27,11 @@ class CocoImageDataset(Dataset):
     def __getitem__(self, index):
         image_path = os.path.join(args.image_dir_path, self.image_names[index])
         img = Image.open(image_path).convert("RGB")
-        return self.processor(img)
+        return self.processor(img), self.image_names[index]
 
 
-def process_single(images, model, image_names, output_fd: TextIOWrapper):
+def process_single(batch, model, output_fd: TextIOWrapper):
+    images, image_names = batch
     texts = [args.infer_prompt] * args.minigpt_infer_batch_size
     results = [""] * args.minigpt_infer_batch_size
     filtered = []
@@ -58,7 +59,7 @@ def main():
     )
     with open(args.caption_data_path, "w" if args.restart else "a", encoding="utf-8") as f:
         for batch in tqdm(dataloader):
-            process_single(batch, model=model, image_names=image_names, output_fd=f)
+            process_single(batch, model=model, output_fd=f)
 
 
 if __name__ == "__main__":

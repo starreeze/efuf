@@ -20,11 +20,15 @@ parser.add_argument("--flattened_data_path", type=str, default="dataset/flattene
 ## format
 parser.add_argument("--column_splitter", type=str, default=" ### ")
 parser.add_argument("--object_splitter", type=str, default=", ")
-parser.add_argument("--subsentence_splitter_set", type=str, default=",.;:!?")
+parser.add_argument("--subsentence_splitter_set", type=str, default=",.;!?")
 parser.add_argument("--clip_prompt", type=str, default="A photo containing ")
 
 # insight
 ## model
+### llm for object extraction
+parser.add_argument("--llama_path", type=str, default="/home/nfs02/model/llama2/hf/Llama-2-13b-chat-hf")
+# parser.add_argument("--llama_batch_size", type=int, default=4)
+### methods for insight
 parser.add_argument("--patch_size", type=int, default=48)
 parser.add_argument("--window_size", type=int, default=4)  # number of patches
 parser.add_argument("--average_top_k", type=int, default=4)
@@ -33,6 +37,7 @@ parser.add_argument("--least_data_size", type=int, default=50)
 parser.add_argument("--sample_policy", type=str, default="random")
 
 # finetune
+parser.add_argument("--unlearn_target", type=str, default="subsentence", help="object or subsentence")
 parser.add_argument("--hal_clip_thres", type=float, default=21, help="clip score < thres will be regraded as hal")
 parser.add_argument("--norm_clip_thres", type=float, default=32, help="clip score > thres will be regraded as norm")
 parser.add_argument("--max_new_tokens", type=int, default=200, help="max number of generated tokens")
@@ -49,7 +54,7 @@ parser.add_argument("--train_prompt", type=str, default="<Img><ImageHere></Img> 
 ## models
 ### minigpt
 parser.add_argument(
-    "--cfg_path", default="minigpt4/configs/models/minigpt4_llama2.yaml", help="path to configuration file."
+    "--minigpt_cfg_path", default="configs/minigpt4_llama2_fp16.yaml", help="path to configuration file."
 )
 parser.add_argument("--minigpt_infer_batch_size", type=int, default=4)
 parser.add_argument("--minigpt_infer_retry", type=int, default=3)
@@ -66,7 +71,7 @@ print(args)
 # model provided parser
 def minigpt4_finetune_parser():
     parser = argparse.ArgumentParser(description="finetune minigpt4")
-    parser.add_argument("--cfg-path", default=args.cfg_path, help="path to configuration file.")
+    parser.add_argument("--cfg-path", default=args.minigpt_cfg_path, help="path to configuration file.")
     parser.add_argument("--name", type=str, default="A2", help="evaluation name")
     parser.add_argument("--ckpt", type=str, help="path to configuration file.")
     parser.add_argument("--eval_opt", type=str, default="all", help="path to configuration file.")
