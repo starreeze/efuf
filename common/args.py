@@ -9,7 +9,7 @@ parser = argparse.ArgumentParser()
 ## path
 parser.add_argument("--vqa_prompt_path", type=str, default="dataset/vqa_prompt.txt")
 parser.add_argument("--vqa_data_path", type=str, default="dataset/rlhf.json")
-parser.add_argument("--caption_prompt_path", type=str, default="dataset/caption_prompt.txt")
+parser.add_argument("--caption_prompt_path", type=str, default="dataset/caption_prompt_finetune.txt")
 parser.add_argument("--caption_data_path", type=str, default="dataset/captions.txt")
 parser.add_argument("--object_data_path", type=str, default="dataset/objects.txt")
 parser.add_argument("--image_dir_path", type=str, default="dataset/images")
@@ -20,14 +20,26 @@ parser.add_argument("--flattened_data_path", type=str, default="dataset/flattene
 ## format
 parser.add_argument("--column_splitter", type=str, default=" ### ")
 parser.add_argument("--object_splitter", type=str, default=", ")
-parser.add_argument("--subsentence_splitter_set", type=str, default=",.;!?")
+parser.add_argument("--subsentence_splitter_set", type=str, default=",.;!?:")
 parser.add_argument("--clip_prompt", type=str, default="A photo containing ")
 
 # insight
 ## model
 ### llm for object extraction
-parser.add_argument("--llama_path", type=str, default="/home/nfs02/model/llama2/hf/Llama-2-13b-chat-hf")
+parser.add_argument("--llama_path", type=str, default="/home/nfs02/model/llama2/hf/Llama-2-7b-chat-hf")
+parser.add_argument("--llama_8bit", action="store_true")
+llama_instruction_placeholder = "$$$"
+llama_sys_prompt = (
+    "<<SYS>>\nYou are a helpful, respectful and honest assistant. "
+    "Strictly follow the instruction and always answer as helpfully as possible.\n"
+    f"<</SYS>>\n\n</s> [INST] {llama_instruction_placeholder} [/INST] "
+)
+parser.add_argument("--llama_instruction_placeholder", type=str, default=llama_instruction_placeholder)
+parser.add_argument("--llama_sys_prompt", type=str, default=llama_sys_prompt)
 # parser.add_argument("--llama_batch_size", type=int, default=4)
+
+parser.add_argument("--prompt_input_label", type=str, default="(Input)")
+parser.add_argument("--prompt_output_label", type=str, default="(Output)")
 ### methods for insight
 parser.add_argument("--patch_size", type=int, default=48)
 parser.add_argument("--window_size", type=int, default=4)  # number of patches

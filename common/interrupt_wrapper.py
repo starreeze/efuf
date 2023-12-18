@@ -91,7 +91,8 @@ def resumable_fn(
 
     checkpoint = 0
     if restart:
-        os.remove(checkpoint_path)
+        if os.path.exists(checkpoint_path):
+            os.remove(checkpoint_path)
     try:
         with open(checkpoint_path, "r") as checkpoint_file:
             checkpoint = int(checkpoint_file.read().strip())

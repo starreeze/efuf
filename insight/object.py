@@ -4,7 +4,7 @@
 """extract objects from the rlfh data (with hallucination only)"""
 
 from __future__ import annotations
-import json, re, os, sys
+import json, re, os, sys, torch
 from io import TextIOWrapper
 from functools import partial
 from abc import abstractmethod
@@ -15,14 +15,62 @@ from common.interrupt_wrapper import resumable_fn
 from common.args import args
 
 
+class LlamaChat:
+    model, tokenizer = None, None
+
+    @classmethod
+    def init_llama(cls):
+        from transformers import LlamaForCausalLM, LlamaTokenizer
+
+        cls.model = LlamaForCausalLM.from_pretrained(
+            args.llama_path,
+            local_files_only=True,
+            torch_dtype=torch.float16,
+            load_in_8bit=args.llama_8bit,
+            device_map={"": 0},
+        )
+        cls.tokenizer = LlamaTokenizer.from_pretrained(args.llama_path, use_fast=True, local_files_only=True)
+
+    def __init__(self, instruction, max_new_tokens) -> None:
+        self.prompt = args.llama_sys_prompt.replace(args.llama_instruction_placeholder, instruction)
+        self.max_new_tokens = max_new_tokens
+
+    def infer(self, inputs: str) -> str:
+        inputs = self.prompt + inputs
+        if self.model is None:
+            self.init_llama()
+        model_inputs = self.tokenizer(inputs, return_tensors="pt", return_token_type_ids=False).to(  # type:ignore
+            "cuda:0"
+        )
+        output = self.model.generate(  # type:ignore
+            **model_inputs,
+            min_length=1,
+            max_new_tokens=self.max_new_tokens,
+            num_beams=1,
+            temperature=1,
+            top_p=0.9,
+            repetition_penalty=1,
+            length_penalty=1,
+            do_sample=False,
+        )
+        output_tokens = output[0][len(model_inputs["input_ids"][0]) :]
+        response = self.tokenizer.decode(output_tokens, skip_special_tokens=True)  # type:ignore
+        return response
+
+
 class LLMExtractor:
-    def __init__(self, prompt_path) -> None:
-        with open(prompt_path, "r") as f:
-            self.prompt = f.read()
+    def __init__(self, instruction_path) -> None:
+        with open(instruction_path, "r") as f:
+            self.instruction = f.read().format(
+                input_label=args.prompt_input_label, output_label=args.prompt_output_label
+            )
 
     def check_valid(self, response: str) -> None:
         if "i'm sorry" in response.lower():
             raise ValueError("model not willing to respond.")
+
+    def format_input(self, inputs: str) -> str:
+        return f"{args.prompt_input_label} {inputs}\n{args.prompt_output_label} "
 
     @abstractmethod
     def extract(self, inputs: str) -> str:
@@ -30,20 +78,12 @@ class LLMExtractor:
 
 
 class LlamaExtractor(LLMExtractor):
-    def __init__(self, prompt_path) -> None:
-        from transformers import AutoModelForCausalLM, AutoTokenizer
-
-        super().__init__(prompt_path)
-        self.model = AutoModelForCausalLM.from_pretrained(args.llama_path, device_map="auto", local_files_only=True)
-        self.tokenizer = AutoTokenizer.from_pretrained(args.llama_path, use_fast=True, local_files_only=True)
+    def __init__(self, instruction_path) -> None:
+        super().__init__(instruction_path)
+        self.chat = LlamaChat(self.instruction, 50)
 
     def extract(self, inputs: str) -> str:
-        inputs = self.prompt.format(inputs)
-        model_inputs = self.tokenizer(inputs, return_tensors="pt", return_token_type_ids=False).to("cuda:0")
-        output = self.model.generate(
-            **model_inputs, max_new_tokens=50, num_beams=5, temperature=0.8, top_k=50, top_p=0.95
-        )
-        response = self.tokenizer.decode(output[0][len(inputs) :], skip_special_tokens=True)
+        response = self.chat.infer(self.format_input(inputs))
         self.check_valid(response)
         return response
 
@@ -71,7 +111,8 @@ class ChatGPTExtractor(LLMExtractor):
             raise NotImplementedError()
 
     def extract(self, inputs: str) -> str:
-        response = self.complete([{"role": "user", "content": self.prompt.format(inputs)}])  # type:ignore
+        raise NotImplementedError("not modified into instruction")
+        response = self.complete([{"role": "user", "content": self.instruction.format(inputs)}])  # type:ignore
         self.check_valid(response)  # type:ignore
         return response  # type:ignore
 
@@ -133,5 +174,5 @@ def extract_caption(extractor_type):
 
 
 if __name__ == "__main__":
-    extract_caption(ChatGPTExtractor)
+    extract_caption(LlamaExtractor)
     # print(GPTExtractor().extract(open("tmp.txt", "r").read()))

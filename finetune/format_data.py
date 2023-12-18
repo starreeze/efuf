@@ -50,7 +50,7 @@ def process_sample(sample: tuple[str, str, np.ndarray]) -> list[dict[str, str | 
                 {
                     "image": caption_image,
                     "sentence": caption[: index + len(object)],
-                    "object": index,
+                    "position": index,
                     "score": float(score),
                 }
             )
@@ -59,7 +59,7 @@ def process_sample(sample: tuple[str, str, np.ndarray]) -> list[dict[str, str | 
             if result is not None:
                 start, end = result
                 results.append(
-                    {"image": caption_image, "sentence": caption[:end], "subsentence": start, "score": float(score)}
+                    {"image": caption_image, "sentence": caption[:end], "position": start, "score": float(score)}
                 )
         else:
             raise NotImplementedError()

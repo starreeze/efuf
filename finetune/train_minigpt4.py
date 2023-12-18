@@ -3,47 +3,59 @@
 # @Author  : Shangyu.Xing (starreeze@foxmail.com)
 
 from __future__ import annotations
-import os, sys
+import os, sys, json, torch
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 import numpy as np
+from tqdm import tqdm
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
+from transformers import AutoTokenizer
 from minigpt4.common.eval_utils import init_model
 from common.args import args, minigpt4_finetune_parser
-from insight.object import get_caption_info
 
 
-class ImageObjectDataset(Dataset):
-    def __init__(self, processor):
-        super(ImageObjectDataset, self).__init__()
-        self.processor = processor
-        # as new generated data has no [], it is regarded as norm
-        self.scores = np.load(args.norm_result_path)
-        with open(args.object_result_path, "r") as f:
-            self.objects = f.read().splitlines()
-        with open(args.caption_data_path, "r") as f:
-            self.captions = f.read().splitlines()
-        assert len(self.scores) == len(self.objects) == len(self.captions)
+class FinetuneDataset(Dataset):
+    def __init__(self, vis_processor, tokenizer):
+        super(FinetuneDataset, self).__init__()
+        self.vis_processor = vis_processor
+        self.tokenizer = tokenizer  # prompt, image_list -> token ids
+        print("constructing dataset ...")
+        with open(args.flattened_data_path, "r") as f:
+            data: list[dict[str, str | int]] = json.load(f)
+        self.data = []
+        for d in tqdm(data):
+            # XXX here we use hard threshold
+            if d["score"] < args.hal_clip_thres:
+                d["score"] = -1
+                self.data.append(d)
+            elif d["score"] > args.norm_clip_thres:
+                d["score"] = 1
+                self.data.append(d)
 
     def __len__(self):
-        return len(self.scores)
+        return len(self.data)
 
     def __getitem__(self, index):
-        image_name, caption, _ = get_caption_info(self.captions[index])
-        assert caption
-        image_path = os.path.join(args.image_dir_path, image_name)
-        img = self.processor(Image.open(image_path).convert("RGB"))
+        sample = self.data[index]
+        image_path = os.path.join(args.image_dir_path, sample["image"])
+        image = self.vis_processor(Image.open(image_path).convert("RGB"))
+        pos = sample["position"]
+        context, target = sample["sentence"][:pos], sample["sentence"][pos:]
+        encoded_context = self.tokenizer(context, return_tensors="pt")["input_ids"]
+        encoded_target = self.tokenizer(target, return_tensors="pt")["input_ids"][1:]
+        target_mask = torch.cat(
+            [torch.zeros(len(encoded_context), dtype=torch.int), torch.ones(len(encoded_target), dtype=torch.int)]
+        )
+        return image, torch.cat([encoded_context, encoded_target]), target_mask
 
 
 def main():
     model, vis_processor = init_model(minigpt4_finetune_parser().parse_args([]))
     model.train()
-    image_names = sorted(os.listdir(args.image_dir_path))[: args.infer_num_sample]
-    dataloader = DataLoader(
-        ImageObjectDataset(vis_processor), args.batch_size, False, num_workers=args.infer_dataloader_worker
-    )
+
+    dataset = FinetuneDataset(vis_processor, model.get_context_emb)
 
 
 if __name__ == "__main__":
