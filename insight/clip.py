@@ -28,7 +28,7 @@ class ObjectData(Dataset):
         self.processor = processor
         self.image_dir = image_dir
         with open(object_path, "r") as f:
-            self.objects = f.read().splitlines()
+            self.objects = f.read().splitlines()[args.start_pos : args.end_pos]
 
     def __len__(self):
         return len(self.objects)
@@ -80,7 +80,7 @@ class CaptionFTData(ObjectData):  # fine text
         """return: image, object descriptions, hal"""
         image, rank, objects = self.objects[idx].split(args.column_splitter)
         objects = objects.split(args.object_splitter)
-        hals = [obj[0] == "[" for obj in objects]
+        hals = [bool(obj) and obj[0] == "[" for obj in objects]
         object_descs = [self.format_prompt(obj.strip("[]")) for obj in objects]
         image = Image.open(os.path.join(args.image_dir_path, image)).convert("RGB")
         return image, object_descs, hals
@@ -163,7 +163,7 @@ class ClipInfer:
 
     def infer_caption_FTFI(self, dataset: CaptionFTFIData, bar_position=0):
         data = DataLoader(dataset, 1, shuffle=False, num_workers=num_workers, collate_fn=dataset.collate_fn)
-        scores = ([], [])
+        hals, norms = [], []
         with torch.no_grad():
             for batch in tqdm(data, position=bar_position):
                 if batch is None:
@@ -180,11 +180,12 @@ class ClipInfer:
                 s = patch_score.shape
                 patch_score = patch_score.reshape(s[0] * s[1], s[2]).transpose(0, 1)
                 obj_score = torch.mean(patch_score.topk(args.average_top_k, dim=-1)[0], dim=-1)
-                scores[0].append(np.empty([0]))
-                scores[1].append(np.empty([0]))
+                scores = ([], [])
                 for score, hal in zip(obj_score, batch[1]):  # type: ignore
-                    scores[1 - hal][-1].append(float(score))
-        return scores  # hals, norms
+                    scores[1 - hal].append(float(score))
+                hals.append(np.array(scores[0]))
+                norms.append(np.array(scores[1]))
+        return hals, norms
 
 
 def plot_histogram(hal, norm, filename="result.png", bins=np.arange(15, 40, 1)):
@@ -214,8 +215,8 @@ def infer_object_image(bar_position=0, plot=True):
             hals, norms = clip.infer_caption_FTFI(dataset, bar_position)  # type: ignore
         else:
             raise NotImplementedError()
-        np.save(args.hal_result_path, np.array(hals))
-        np.save(args.norm_result_path, np.array(norms))
+        np.save(args.hal_result_path, np.array(hals, dtype="object"))
+        np.save(args.norm_result_path, np.array(norms, dtype="object"))
 
     hal = np.concatenate(np.load(args.hal_result_path, allow_pickle=True))
     norm = np.concatenate(np.load(args.norm_result_path, allow_pickle=True))

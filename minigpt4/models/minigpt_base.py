@@ -208,7 +208,7 @@ class MiniGPTBase(BaseModel):
 
         return to_regress_token_ids, to_regress_token_attn, targets
 
-    def preparing_embedding(self, samples):
+    def preparing_embedding(self, samples, add_end_sym=True):
         ### prepare input tokens
         if 'image' in samples:
             img_embeds, img_atts = self.encode_img(samples["image"])
@@ -249,7 +249,7 @@ class MiniGPTBase(BaseModel):
 
             ### prepare target tokens
             self.llama_tokenizer.padding_side = "right"
-            text = [t + self.end_sym for t in samples["answer"]]
+            text = [t + self.end_sym for t in samples["answer"]] if add_end_sym else samples["answer"]
 
             regress_tokens = self.llama_tokenizer(
                 text,
@@ -270,10 +270,10 @@ class MiniGPTBase(BaseModel):
 
         return cond_embeds, cond_atts, regress_embeds, regress_atts, part_targets
 
-    def forward(self, samples, reduction='mean'):
+    def forward(self, samples, reduction='mean', add_end_sym=True):
         # prepare the embedding to condition and the embedding to regress
         cond_embeds, cond_atts, regress_embeds, regress_atts, part_targets = \
-            self.preparing_embedding(samples)
+            self.preparing_embedding(samples, add_end_sym)
 
         # concat the embedding to condition and the embedding to regress
         inputs_embeds, attention_mask, input_lens = \

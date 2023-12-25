@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 # @Date    : 2023-10-24 10:04:32
 # @Author  : Shangyu.Xing (starreeze@foxmail.com)
-"""extract objects from the rlfh data (with hallucination only)"""
+"""extract objects from the vqa/caption data"""
 
 from __future__ import annotations
 import json, re, os, sys, torch
 from io import TextIOWrapper
 from functools import partial
 from abc import abstractmethod
+from tqdm import tqdm
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
@@ -87,6 +88,23 @@ class LlamaExtractor(LLMExtractor):
         self.check_valid(response)
         return response
 
+    @staticmethod
+    def post_processing():
+        "to regulate the objects file"
+        with open(args.object_data_path, "r") as f:
+            lines = f.read().splitlines()
+        new_content = []
+        for i in range(len(lines)):
+            if lines[i].startswith("COCO_train2014"):
+                content = lines[i].split(args.column_splitter)[-1]
+                if content:
+                    new_content.append(lines[i].strip(","))
+                elif i + 1 < len(lines) and lines[i + 1] and not lines[i + 1].startswith("COCO_train2014"):
+                    new_content.append(lines[i] + lines[i + 1].strip(","))
+        with open(args.object_data_path, "w") as f:
+            # with open("objects.txt", "w") as f:
+            f.write("\n".join(new_content))
+
 
 class ChatGPTExtractor(LLMExtractor):
     def __init__(self, prompt_path, version=35) -> None:
@@ -146,12 +164,22 @@ def extract_sample_caption(sample: str, extractor: LLMExtractor, output_fd: Text
     objects_str = extractor.extract(caption)
     # sometimes LLM will not follow the format and output "the objects in the image are: xxx, xxx..."
     # we should filter its description which is usually ends with :
-    objects_str = objects_str[objects_str.find(":") + 1 :].strip(args.subsentence_splitter_set + "'\"")
-    objects = objects_str.split(args.object_splitter)
-    objects_brackets = []
-    for obj in objects:
-        match = re.search(r"\[(\w )*" + obj + r"( \w)*\]", caption)
-        objects_brackets.append(match.group(0) if match else obj)
+    # if not found then [0 :] is also ok with this expression
+    objects_str = objects_str[objects_str.find(":") + 1 :]
+    if (p := objects_str.find("(")) != -1:  # we also discard everything after (
+        objects_str = objects_str[:p]
+    objects_str = re.sub("[\n\t\r]", " ", objects_str).strip(args.subsentence_splitter_set + "'\" ")
+    objects_brackets = set()  # repetition is not allowed
+    for obj in objects_str.split(args.object_splitter):
+        try:  # object must be found as a whole word match
+            match = re.search(r"\b" + obj + r"\b", caption)
+            if match:
+                target = match.group(0)
+                if re.search(r"\[(\w )*" + obj + r"( \w)*\]", caption):
+                    target = "[" + target + "]"
+                objects_brackets.add(target)
+        except re.error:
+            tqdm.write(f"matching failed for: {obj}")
     objects_str = args.object_splitter.join(objects_brackets)
     output_fd.write(args.column_splitter.join([image_name, str(rank), objects_str]) + "\n")
     output_fd.flush()
@@ -175,4 +203,5 @@ def extract_caption(extractor_type):
 
 if __name__ == "__main__":
     extract_caption(LlamaExtractor)
+    # LlamaExtractor.post_processing()
     # print(GPTExtractor().extract(open("tmp.txt", "r").read()))

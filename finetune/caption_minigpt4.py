@@ -50,7 +50,7 @@ def process_single(batch, model, output_fd: TextIOWrapper):
 def main():
     model, vis_processor = init_model(minigpt4_finetune_parser().parse_args([]))
     model.eval()
-    image_names = sorted(os.listdir(args.image_dir_path))[args.infer_sample_start : args.infer_sample_end]
+    image_names = sorted(os.listdir(args.image_dir_path))[args.start_pos : args.end_pos]
     dataloader = DataLoader(
         CocoImageDataset(image_names, vis_processor),
         args.minigpt_infer_batch_size,

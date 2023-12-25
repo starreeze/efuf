@@ -3,8 +3,13 @@
 # @Author  : Shangyu.Xing (starreeze@foxmail.com)
 """
 from captions, objects and scores format a flattened json file,
-where each object has an entry containing fields: sentence, sub-sentence/object mask, score
+where each object has an entry containing fields: sentence, sub-sentence/object position, score
 
+normal text ... hallucination object/subsentence
+                ^
+                |
+    sub-sentence/object position
+    
 sentence: type=str, stripped sentence until the target
 sub-sentence/object mask: type=int, beginning position (char-level) of the unlearn target
 score: float, clip score of the object
@@ -69,15 +74,21 @@ def process_sample(sample: tuple[str, str, np.ndarray]) -> list[dict[str, str | 
 def main():
     with open(args.caption_data_path, "r") as f:
         captions = f.read().splitlines()
+    captions_d = {}
+    for sample in captions:
+        name, caption = sample.split(args.column_splitter)
+        captions_d[name] = caption
     with open(args.object_data_path, "r") as f:
         objects = f.read().splitlines()
     # as new generated data has no [], it is regarded as norm
     scores = np.load(args.norm_result_path, allow_pickle=True)
-    assert len(captions) == len(objects) == len(scores)
+    assert len(objects) == len(scores)
     results = []
-    for sample in tqdm(zip(captions, objects, scores), total=len(captions)):
-        results.extend(process_sample(sample))
-    with open(args.flattened_data_path, "w" if args.restart else "a") as f:
+    for sample in tqdm(zip(objects, scores), total=len(objects)):
+        object, score = sample
+        caption = captions_d[object.split(args.column_splitter)[0]]
+        results.extend(process_sample((object, score, caption)))
+    with open(args.flattened_data_path, "w") as f:
         json.dump(results, f, indent=2)
 
 

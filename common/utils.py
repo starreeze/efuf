@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-# from typing import Iterable
+from typing import Callable
 import torch, numpy
 
 
@@ -26,3 +26,26 @@ def to_device(batch, device="cuda"):
     # if isinstance(type_hint, Iterable):
     #     return (to_device(x, device) for x in batch)
     raise NotImplementedError(f"Unknown type when casting to device: {type(batch).__name__}")
+
+
+class Logger:
+    def __init__(self, log_fn: Callable[[dict[str, float]], None] = lambda _: None, name="", avg_prefix="avg"):
+        self.logs: dict[str, list[float]] = {}
+        self.log_fn = log_fn
+        self.name = name
+        self.avg_prefix = avg_prefix
+
+    def get_average(self):
+        return {f"{self.name}_{self.avg_prefix}_{k}": sum(v) / len(v) for k, v in self.logs.items()}
+
+    def log(self, **kwargs):
+        for k, v in kwargs.items():
+            if k not in self.logs:
+                self.logs[k] = [v]
+            else:
+                self.logs[k].append(v)
+        self.log_fn({f"{self.name}_{k}": v[-1] for k, v in self.logs.items()})
+        self.log_fn({f"{self.name}_{self.avg_prefix}_{k}": sum(v) / len(v) for k, v in self.logs.items()})
+
+    def clear(self):
+        self.logs = {}

@@ -53,8 +53,6 @@ parser.add_argument("--unlearn_target", type=str, default="subsentence", help="o
 parser.add_argument("--hal_clip_thres", type=float, default=21, help="clip score < thres will be regraded as hal")
 parser.add_argument("--norm_clip_thres", type=float, default=32, help="clip score > thres will be regraded as norm")
 parser.add_argument("--max_new_tokens", type=int, default=200, help="max number of generated tokens")
-parser.add_argument("--infer_sample_start", type=int, default=0)
-parser.add_argument("--infer_sample_end", type=int, default=1000)
 parser.add_argument("--infer_dataloader_worker", type=int, default=0)
 parser.add_argument(
     "--infer_prompt",
@@ -62,19 +60,37 @@ parser.add_argument(
     default="<Img><ImageHere></Img> Please describe the image in no more than 50 words. Make sure to be brief and concise.",
 )
 parser.add_argument("--train_dataloader_worker", type=int, default=0)
-parser.add_argument("--train_prompt", type=str, default="<Img><ImageHere></Img> Please describe the image.")
+# as context should not be counted in instruction, we need to remove prompt template from cfg and add it here
+parser.add_argument(
+    "--train_prompt", type=str, default="[INST] <Img><ImageHere></Img> Please describe the image. [/INST]"
+)
+parser.add_argument("--valid_data_split", type=float, default=0.1)
+parser.add_argument("--wandb_user", type=str, default="starreeze")
+parser.add_argument("--wandb_key", type=str, default="a48676b858238540d4fdf76b89d0366d611426f6")
+parser.add_argument("--print_per_n_step", type=int, default=1)
+parser.add_argument("--eval_per_epoch", type=int, default=5)
 ## models
 ### minigpt
 parser.add_argument(
-    "--minigpt_cfg_path", default="configs/minigpt4_llama2_fp16.yaml", help="path to configuration file."
+    "--minigpt_infer_cfg", default="configs/minigpt4_infer_fp16.yaml", help="path to configuration file."
 )
-parser.add_argument("--minigpt_infer_batch_size", type=int, default=4)
+parser.add_argument(
+    "--minigpt_train_cfg", default="configs/minigpt4_train_fp16.yaml", help="path to configuration file."
+)
+parser.add_argument("--minigpt_infer_batch_size", type=int, default=8)
 parser.add_argument("--minigpt_infer_retry", type=int, default=3)
-parser.add_argument("--minigpt_train_batch_size", type=int, default=4)
+parser.add_argument("--minigpt_train_bs_pos", type=int, default=2, help="number of positive samples in a batch")
+parser.add_argument("--minigpt_train_bs_neg", type=int, default=2, help="number of negative samples in a batch")
+parser.add_argument("--minigpt_train_lr", type=float, default=1e-5)
+parser.add_argument("--minigpt_train_wd", type=float, default=0.05)
+parser.add_argument("--minigpt_train_epoch", type=int, default=2)
+parser.add_argument("--minigpt_ckpt_path", type=str, default="checkpoints/minigpt")
 
 # common control
 parser.add_argument("--restart", action="store_true")
 parser.add_argument("--seed", type=int, default=28509)
+parser.add_argument("--start_pos", type=int, default=0)
+parser.add_argument("--end_pos", type=int, default=int(1e10))
 
 args = parser.parse_args()
 print(args)
@@ -83,7 +99,7 @@ print(args)
 # model provided parser
 def minigpt4_finetune_parser():
     parser = argparse.ArgumentParser(description="finetune minigpt4")
-    parser.add_argument("--cfg-path", default=args.minigpt_cfg_path, help="path to configuration file.")
+    parser.add_argument("--cfg-path", default=args.minigpt_infer_cfg, help="path to configuration file.")
     parser.add_argument("--name", type=str, default="A2", help="evaluation name")
     parser.add_argument("--ckpt", type=str, help="path to configuration file.")
     parser.add_argument("--eval_opt", type=str, default="all", help="path to configuration file.")
