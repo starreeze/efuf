@@ -50,8 +50,9 @@ parser.add_argument("--sample_policy", type=str, default="random")
 
 # finetune
 parser.add_argument("--unlearn_target", type=str, default="subsentence", help="object or subsentence")
-parser.add_argument("--hal_clip_thres", type=float, default=21, help="clip score < thres will be regraded as hal")
+parser.add_argument("--hal_clip_thres", type=float, default=23, help="clip score < thres will be regraded as hal")
 parser.add_argument("--norm_clip_thres", type=float, default=32, help="clip score > thres will be regraded as norm")
+parser.add_argument("--negative_weight", type=float, default=0.1)
 parser.add_argument("--max_new_tokens", type=int, default=200, help="max number of generated tokens")
 parser.add_argument("--infer_dataloader_worker", type=int, default=0)
 parser.add_argument(
@@ -77,20 +78,22 @@ parser.add_argument(
 parser.add_argument(
     "--minigpt_train_cfg", default="configs/minigpt4_train_fp16.yaml", help="path to configuration file."
 )
-parser.add_argument("--minigpt_infer_batch_size", type=int, default=8)
+parser.add_argument("--minigpt_infer_batch_size", type=int, default=32)
 parser.add_argument("--minigpt_infer_retry", type=int, default=3)
-parser.add_argument("--minigpt_train_bs_pos", type=int, default=2, help="number of positive samples in a batch")
-parser.add_argument("--minigpt_train_bs_neg", type=int, default=2, help="number of negative samples in a batch")
-parser.add_argument("--minigpt_train_lr", type=float, default=1e-5)
+parser.add_argument("--minigpt_train_bs_pos", type=int, default=8, help="number of positive samples in a batch")
+parser.add_argument("--minigpt_train_bs_neg", type=int, default=8, help="number of negative samples in a batch")
+parser.add_argument("--minigpt_train_lr", type=float, default=5e-6)
 parser.add_argument("--minigpt_train_wd", type=float, default=0.05)
-parser.add_argument("--minigpt_train_epoch", type=int, default=2)
-parser.add_argument("--minigpt_ckpt_path", type=str, default="checkpoints/minigpt")
+parser.add_argument("--minigpt_train_epoch", type=int, default=1)
+parser.add_argument("--minigpt_ckpt_load_path", type=str, default="checkpoints/pretrained_minigpt4_llama2_7b.pth")
+parser.add_argument("--minigpt_ckpt_save_path", type=str, default="checkpoints/minigpt4_llama2_7b.pth")
 
 # common control
 parser.add_argument("--restart", action="store_true")
 parser.add_argument("--seed", type=int, default=28509)
 parser.add_argument("--start_pos", type=int, default=0)
 parser.add_argument("--end_pos", type=int, default=int(1e10))
+parser.add_argument("--proxy", type=str, default="http://114.212.105.13:7890")
 
 args = parser.parse_args()
 print(args)

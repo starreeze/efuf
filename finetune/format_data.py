@@ -36,13 +36,13 @@ def find_subsentence(sentence: str, target_word: str):
     return None
 
 
-def process_sample(sample: tuple[str, str, np.ndarray]) -> list[dict[str, str | int]]:
+def process_sample(sample: tuple[str, str, np.ndarray]) -> list[dict[str, str | int]] | None:
     caption, objects, scores = sample
-    caption_image, caption = caption.split(args.column_splitter)
-    object_image, _, objects = objects.split(args.column_splitter)
-    assert caption_image == object_image
+    image, _, objects = objects.split(args.column_splitter)
     objects = [obj.strip("[]") for obj in objects.split(args.object_splitter)]
-    assert len(objects) == scores.shape[0]
+    if len(objects) != scores.shape[0]:
+        tqdm.write("objects and scores not match! skipping...")
+        return None
 
     results = []
     for object, score in zip(objects, scores):
@@ -53,7 +53,7 @@ def process_sample(sample: tuple[str, str, np.ndarray]) -> list[dict[str, str | 
             # XXX should we keep the former hallucination objects in the training sample?
             results.append(
                 {
-                    "image": caption_image,
+                    "image": image,
                     "sentence": caption[: index + len(object)],
                     "position": index,
                     "score": float(score),
@@ -63,9 +63,7 @@ def process_sample(sample: tuple[str, str, np.ndarray]) -> list[dict[str, str | 
             result = find_subsentence(caption, object)
             if result is not None:
                 start, end = result
-                results.append(
-                    {"image": caption_image, "sentence": caption[:end], "position": start, "score": float(score)}
-                )
+                results.append({"image": image, "sentence": caption[:end], "position": start, "score": float(score)})
         else:
             raise NotImplementedError()
     return results
@@ -87,7 +85,9 @@ def main():
     for sample in tqdm(zip(objects, scores), total=len(objects)):
         object, score = sample
         caption = captions_d[object.split(args.column_splitter)[0]]
-        results.extend(process_sample((object, score, caption)))
+        result = process_sample((caption, object, score))
+        if result is not None:
+            results.extend(result)
     with open(args.flattened_data_path, "w") as f:
         json.dump(results, f, indent=2)
 

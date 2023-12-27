@@ -13,7 +13,8 @@ from torch.utils.data import DataLoader, Dataset, random_split
 from torch.optim import AdamW
 from minigpt4.common.eval_utils import init_model
 from common.args import args, minigpt4_finetune_parser
-from common.utils import to_device, Logger
+from common.utils import Logger
+from finetune.loss import get_loss
 
 
 class FinetuneDataset(Dataset):
@@ -26,12 +27,11 @@ class FinetuneDataset(Dataset):
             data: list[dict[str, str | int]] = json.load(f)
         self.data = []
         for d in tqdm(data):
-            # XXX here we use hard threshold
+            # TODO a new idea: instead of tuning the positive/negative samples,
+            # directly "force align" the loss and clip scores using margin loss
             if score_filter <= 0 and d["score"] < args.hal_clip_thres:
-                d["score"] = -1
                 self.data.append(d)
             elif score_filter >= 0 and d["score"] > args.norm_clip_thres:
-                d["score"] = 1
                 self.data.append(d)
 
     def __len__(self):
@@ -53,9 +53,9 @@ class FinetuneDataset(Dataset):
 
 
 class ContinuousDataLoader(DataLoader):
-    def __init__(self, dataset: Dataset, batch_size, shuffle=True, **kwargs):
-        "a dataloader that never ends"
-        super().__init__(dataset, batch_size=batch_size, shuffle=shuffle, **kwargs)
+    def __init__(self, dataset: Dataset, batch_size, shuffle=True, drop_last=True, **kwargs):
+        "a dataloader that never ends. drop_last is set to True"
+        super().__init__(dataset, batch_size=batch_size, shuffle=shuffle, drop_last=drop_last, **kwargs)
         self.loader = iter(super(ContinuousDataLoader, self).__iter__())
 
     def __len__(self) -> int:
@@ -80,16 +80,14 @@ def load_datasets(vis_processor, score_filter, train_bs, valid_bs, continuous=Fa
     if continuous:
         train_loader = ContinuousDataLoader(train, train_bs, shuffle=True)
     else:
-        train_loader = DataLoader(train, train_bs, shuffle=True)
-    valid_loader = DataLoader(valid, valid_bs, shuffle=False)
+        train_loader = DataLoader(train, train_bs, shuffle=True, drop_last=True)
+    valid_loader = DataLoader(valid, valid_bs, shuffle=False, drop_last=True)
     return train_loader, valid_loader
 
 
 def train_step(model: torch.nn.Module, pos, neg, step: int, epoch: int, optimizer: AdamW, logger: Logger):
     optimizer.zero_grad()
-    loss_pos = model(to_device(pos), add_end_sym=False)["loss"]
-    loss_neg = model(to_device(neg), add_end_sym=False)["loss"]
-    loss = loss_pos - loss_neg
+    loss, loss_pos, loss_neg = get_loss(model, pos, neg)
     logger.log(loss_pos=loss_pos.item(), loss_neg=loss_neg.item(), loss=loss.item())
     if step % args.print_per_n_step == 0:
         tqdm.write(
@@ -104,11 +102,9 @@ def evaluate(model: torch.nn.Module, loader_pos: DataLoader, loader_neg: DataLoa
     print("evaluating...")
     logger = Logger(name="eval")
     with torch.no_grad():
-        for batch_idx, (pos, neg) in tqdm(enumerate(zip(loader_pos, loader_neg))):
-            loss_pos = model(to_device(pos), add_end_sym=False)["loss"]
-            loss_neg = model(to_device(neg), add_end_sym=False)["loss"]
-            loss = loss_pos - loss_neg
-            logger.log(loss_pos=loss_pos.item(), loss_neg=loss_neg.item(), loss=loss.item())
+        for pos, neg in tqdm(zip(loader_pos, loader_neg), total=len(loader_neg)):
+            loss, loss_pos, loss_neg = get_loss(model, pos, neg)
+            logger.log(True, loss_pos=loss_pos.item(), loss_neg=loss_neg.item(), loss=loss.item())
     loss = logger.get_average()
     wandb.log(loss)
     print(f"eval loss: {loss}")
@@ -117,21 +113,22 @@ def evaluate(model: torch.nn.Module, loader_pos: DataLoader, loader_neg: DataLoa
 def train(
     model: torch.nn.Module,
     train_loader_pos: DataLoader[dict],
-    valid_loader_pos: DataLoader[dict],
     train_loader_neg: DataLoader[dict],
+    valid_loader_pos: DataLoader[dict],
     valid_loader_neg: DataLoader[dict],
     optimizer: AdamW,
 ):
     train_logger = Logger(wandb.log, "train")
     model.train()
-    eval_per_n_step = len(train_loader_pos) // args.eval_per_epoch
+    num_step = len(train_loader_neg)
+    eval_per_n_step = num_step // args.eval_per_epoch
     for epoch in range(args.minigpt_train_epoch):
         print(f"Epoch {epoch+1}:")
-        for batch_idx, (pos, neg) in tqdm(enumerate(zip(train_loader_pos, train_loader_neg))):
-            step = epoch * len(train_loader_neg) + batch_idx
-            train_step(model, pos, neg, step, epoch, optimizer, train_logger)
+        for batch_idx, (pos, neg) in tqdm(enumerate(zip(train_loader_pos, train_loader_neg)), total=num_step):
+            step = epoch * num_step + batch_idx
             if step % eval_per_n_step == 0:
                 evaluate(model, valid_loader_pos, valid_loader_neg)
+            train_step(model, pos, neg, step, epoch, optimizer, train_logger)
         train_logger.clear()
 
 
@@ -142,22 +139,31 @@ def save_ckpt(model: torch.nn.Module):
         if k in param_grad_dic.keys() and not param_grad_dic[k]:
             # delete parameters that do not require gradient (vit, llama)
             del state_dict[k]
-    save_path = args.minigpt_ckpt_path + ".pth"
+    save_path = args.minigpt_ckpt_save_path
     print(f"Saving checkpoint to {save_path} ...")
     torch.save(state_dict, save_path)
 
 
 def main():
     model, vis_processor = init_model(minigpt4_finetune_parser().parse_args(["--cfg-path", args.minigpt_train_cfg]))
+    checkpoint = torch.load(args.minigpt_ckpt_load_path, map_location="cuda")
+    state_dict = checkpoint["model"]
+    model.load_state_dict(state_dict, strict=False)
+    print("resumed the checkpoint.")
+
     train_pos, valid_pos = load_datasets(
         vis_processor, 1, args.minigpt_train_bs_pos, args.minigpt_infer_batch_size, continuous=True
     )
     train_neg, valid_neg = load_datasets(vis_processor, -1, args.minigpt_train_bs_neg, args.minigpt_infer_batch_size)
+    print("Datasets loaded.")
+
     optim = AdamW(model.parameters(), lr=args.minigpt_train_lr, weight_decay=args.minigpt_train_wd)
 
     os.environ["WANDB_API_KEY"] = args.wandb_key
     os.environ["WANDB_MODE"] = "online"
-    wandb.init(project="lmm_hal", entity=args.wandb_user, name="minigpt", config=vars(args), sync_tensorboard=True)
+    os.environ["http_proxy"] = os.environ["https_proxy"] = args.proxy
+    wandb.init(project="lmm_hal", entity=args.wandb_user, name="minigpt", config=vars(args), sync_tensorboard=False)
+    print("W&B initialized.")
 
     train(model, train_pos, train_neg, valid_pos, valid_neg, optim)
     evaluate(model, valid_pos, valid_neg)

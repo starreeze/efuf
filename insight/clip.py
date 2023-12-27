@@ -167,6 +167,8 @@ class ClipInfer:
         with torch.no_grad():
             for batch in tqdm(data, position=bar_position):
                 if batch is None:
+                    hals.append(np.array([]))
+                    norms.append(np.array([]))
                     continue
                 mask: torch.Tensor = batch[2]
                 # after reshape: [W, H, num_objects]

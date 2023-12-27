@@ -23,9 +23,8 @@ def to_device(batch, device="cuda"):
         return batch.to(device)
     if isinstance(batch, numpy.ndarray):
         return torch.tensor(batch, device=device)
-    # if isinstance(type_hint, Iterable):
-    #     return (to_device(x, device) for x in batch)
-    raise NotImplementedError(f"Unknown type when casting to device: {type(batch).__name__}")
+    return batch
+    # raise NotImplementedError(f"Unknown type when casting to device: {type(batch).__name__}")
 
 
 class Logger:
@@ -38,14 +37,15 @@ class Logger:
     def get_average(self):
         return {f"{self.name}_{self.avg_prefix}_{k}": sum(v) / len(v) for k, v in self.logs.items()}
 
-    def log(self, **kwargs):
+    def log(self, dry=False, **kwargs):
         for k, v in kwargs.items():
             if k not in self.logs:
                 self.logs[k] = [v]
             else:
                 self.logs[k].append(v)
-        self.log_fn({f"{self.name}_{k}": v[-1] for k, v in self.logs.items()})
-        self.log_fn({f"{self.name}_{self.avg_prefix}_{k}": sum(v) / len(v) for k, v in self.logs.items()})
+        if not dry:
+            self.log_fn({f"{self.name}_{k}": v[-1] for k, v in self.logs.items()})
+            self.log_fn({f"{self.name}_{self.avg_prefix}_{k}": sum(v) / len(v) for k, v in self.logs.items()})
 
     def clear(self):
         self.logs = {}
