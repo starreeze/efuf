@@ -36,16 +36,9 @@ def find_subsentence(sentence: str, target_word: str):
     return None
 
 
-def process_sample(sample: tuple[str, str, np.ndarray]) -> list[dict[str, str | int]] | None:
-    caption, objects, scores = sample
-    image, _, objects = objects.split(args.column_splitter)
-    objects = [obj.strip("[]") for obj in objects.split(args.object_splitter)]
-    if len(objects) != scores.shape[0]:
-        tqdm.write("objects and scores not match! skipping...")
-        return None
-
+def process_pos_neg(image: str, caption: str, objects: str, scores: np.ndarray) -> list[dict[str, str | int]] | None:
     results = []
-    for object, score in zip(objects, scores):
+    for object, score in zip([obj.strip("[]") for obj in objects.split(args.object_splitter)], scores):
         # XXX which to unlearn? objects, subsentence or else?
         if args.unlearn_target == "objects":
             index = caption.find(object)
@@ -81,15 +74,24 @@ def main():
     # as new generated data has no [], it is regarded as norm
     scores = np.load(args.norm_result_path, allow_pickle=True)
     assert len(objects) == len(scores)
-    results = []
+    pos_neg, sentence = [], []
     for sample in tqdm(zip(objects, scores), total=len(objects)):
         object, score = sample
-        caption = captions_d[object.split(args.column_splitter)[0]]
-        result = process_sample((caption, object, score))
+        image_name, _, object = object.split(args.column_splitter)
+        if len(object.split(args.object_splitter)) != scores.shape[0] or scores.shape[0] == 0:
+            tqdm.write("objects and scores not match or empty objects! skipping...")
+            continue
+        caption = captions_d[image_name]
+        result = process_pos_neg(image_name, caption, object, scores)
         if result is not None:
-            results.extend(result)
-    with open(args.flattened_data_path, "w") as f:
-        json.dump(results, f, indent=2)
+            pos_neg.extend(result)
+        sentence.append(
+            {"image": image_name, "sentence": caption, "mean": float(score.mean()), "min": float(score.min())}
+        )
+    with open(args.pos_neg_data_path, "w") as f:
+        json.dump(pos_neg, f, indent=2)
+    with open(args.sentence_data_path, "w") as f:
+        json.dump(sentence, f, indent=2)
 
 
 if __name__ == "__main__":
