@@ -26,7 +26,7 @@ class GoldData(Dataset):
     def __init__(self, vis_processor):
         super(GoldData, self).__init__()
         self.vis_processor = vis_processor
-        with open(args.annotation_path, "r") as f:
+        with open(os.path.join(args.annotation_path, "captions_train2014.json"), "r") as f:
             self.data = json.load(f)["annotations"]
 
     def __len__(self):
@@ -213,6 +213,8 @@ def save_ckpt(model: torch.nn.Module, step: int):
     save_path = os.path.join(args.minigpt_ckpt_save_path, f"step_{step:06d}.pth")
     print(f"Saving checkpoint to {save_path} ...")
     torch.save(state_dict, save_path)
+    with open(os.path.join(args.minigpt_ckpt_save_path, "config.json"), "w") as f:
+        json.dump(vars(args), f, indent=2)
 
 
 def main():

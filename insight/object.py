@@ -66,15 +66,38 @@ class LLMExtractor:
                 input_label=args.prompt_input_label, output_label=args.prompt_output_label
             )
 
-    def check_valid(self, response: str) -> None:
-        if "i'm sorry" in response.lower():
+    @staticmethod
+    def segment_objects(objects_str: str, caption: str) -> set[str]:
+        if "i'm sorry" in objects_str.lower():
             raise ValueError("model not willing to respond.")
 
-    def format_input(self, inputs: str) -> str:
+        # sometimes LLM will not follow the format and output "the objects in the image are: xxx, xxx..."
+        # we should filter its description which is usually ends with :
+        # if not found then [0 :] is also ok with this expression
+        objects_str = objects_str[objects_str.find(":") + 1 :]
+        if (p := objects_str.find("(")) != -1:  # we also discard everything after (
+            objects_str = objects_str[:p]
+
+        objects_str = re.sub("[\n\t\r]", " ", objects_str).strip(args.subsentence_splitter_set + "'\" ")
+        objects_brackets = set()  # repetition is not allowed
+        for obj in objects_str.split(args.object_splitter):
+            try:  # object must be found as a whole word match
+                match = re.search(r"\b" + obj + r"\b", caption)
+                if match:
+                    target = match.group(0)
+                    if re.search(r"\[(\w )*" + obj + r"( \w)*\]", caption):
+                        target = "[" + target + "]"
+                    objects_brackets.add(target)
+            except re.error:
+                tqdm.write(f"matching failed for: {obj}")
+        return objects_brackets
+
+    @staticmethod
+    def format_input(inputs: str) -> str:
         return f"{args.prompt_input_label} {inputs}\n{args.prompt_output_label} "
 
     @abstractmethod
-    def extract(self, inputs: str) -> str:
+    def extract(self, inputs: str) -> set[str]:
         pass
 
 
@@ -83,27 +106,26 @@ class LlamaExtractor(LLMExtractor):
         super().__init__(instruction_path)
         self.chat = LlamaChat(self.instruction, 50)
 
-    def extract(self, inputs: str) -> str:
+    def extract(self, inputs: str) -> set[str]:
         response = self.chat.infer(self.format_input(inputs))
-        self.check_valid(response)
-        return response
+        return self.segment_objects(response, inputs)
 
-    @staticmethod
-    def post_processing():
-        "to regulate the objects file"
-        with open(args.object_data_path, "r") as f:
-            lines = f.read().splitlines()
-        new_content = []
-        for i in range(len(lines)):
-            if lines[i].startswith("COCO_train2014"):
-                content = lines[i].split(args.column_splitter)[-1]
-                if content:
-                    new_content.append(lines[i].strip(","))
-                elif i + 1 < len(lines) and lines[i + 1] and not lines[i + 1].startswith("COCO_train2014"):
-                    new_content.append(lines[i] + lines[i + 1].strip(","))
-        with open(args.object_data_path, "w") as f:
-            # with open("objects.txt", "w") as f:
-            f.write("\n".join(new_content))
+    # @staticmethod
+    # def post_processing():
+    #     "to regulate the objects file"
+    #     with open(args.object_data_path, "r") as f:
+    #         lines = f.read().splitlines()
+    #     new_content = []
+    #     for i in range(len(lines)):
+    #         if lines[i].startswith("COCO_train2014"):
+    #             content = lines[i].split(args.column_splitter)[-1]
+    #             if content:
+    #                 new_content.append(lines[i].strip(","))
+    #             elif i + 1 < len(lines) and lines[i + 1] and not lines[i + 1].startswith("COCO_train2014"):
+    #                 new_content.append(lines[i] + lines[i + 1].strip(","))
+    #     with open(args.object_data_path, "w") as f:
+    #         # with open("objects.txt", "w") as f:
+    #         f.write("\n".join(new_content))
 
 
 class ChatGPTExtractor(LLMExtractor):
@@ -128,10 +150,10 @@ class ChatGPTExtractor(LLMExtractor):
         else:
             raise NotImplementedError()
 
-    def extract(self, inputs: str) -> str:
+    def extract(self, inputs: str) -> set[str]:
         raise NotImplementedError("not modified into instruction")
         response = self.complete([{"role": "user", "content": self.instruction.format(inputs)}])  # type:ignore
-        self.check_valid(response)  # type:ignore
+        self.segment_objects(response)  # type:ignore
         return response  # type:ignore
 
 
@@ -161,26 +183,8 @@ def extract_sample_caption(sample: str, extractor: LLMExtractor, output_fd: Text
     # image name ### caption */#
     image_name, caption, rank = get_caption_info(sample)
     assert caption
-    objects_str = extractor.extract(caption)
-    # sometimes LLM will not follow the format and output "the objects in the image are: xxx, xxx..."
-    # we should filter its description which is usually ends with :
-    # if not found then [0 :] is also ok with this expression
-    objects_str = objects_str[objects_str.find(":") + 1 :]
-    if (p := objects_str.find("(")) != -1:  # we also discard everything after (
-        objects_str = objects_str[:p]
-    objects_str = re.sub("[\n\t\r]", " ", objects_str).strip(args.subsentence_splitter_set + "'\" ")
-    objects_brackets = set()  # repetition is not allowed
-    for obj in objects_str.split(args.object_splitter):
-        try:  # object must be found as a whole word match
-            match = re.search(r"\b" + obj + r"\b", caption)
-            if match:
-                target = match.group(0)
-                if re.search(r"\[(\w )*" + obj + r"( \w)*\]", caption):
-                    target = "[" + target + "]"
-                objects_brackets.add(target)
-        except re.error:
-            tqdm.write(f"matching failed for: {obj}")
-    objects_str = args.object_splitter.join(objects_brackets)
+    objects = extractor.extract(caption)
+    objects_str = args.object_splitter.join(objects)
     output_fd.write(args.column_splitter.join([image_name, str(rank), objects_str]) + "\n")
     output_fd.flush()
 
@@ -196,7 +200,7 @@ def extract_vqa(extractor_type):
 def extract_caption(extractor_type):
     with open(args.caption_data_path, "r") as f:
         captions = f.read().splitlines()
-    extractor = extractor_type(args.caption_prompt_path)
+    extractor = extractor_type(args.object_extract_prompt_path)
     with open(args.object_data_path, "w" if args.restart else "a") as f:
         resumable_fn(partial(extract_sample_caption, extractor=extractor, output_fd=f), captions, restart=args.restart)
 

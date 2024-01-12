@@ -61,12 +61,14 @@ def main():
         False,
         num_workers=args.infer_dataloader_worker,
     )
-    ckpt_name = os.path.basename(args.minigpt_ckpt_save_path)
-    if ckpt_name.endswith(".pth") and ckpt_name != "step_000000.pth":
-        prompt = args.minigpt_eval_caption_prompt
-    else:
-        prompt = args.minigpt_train_prompt
-    with open(args.output_path, "w" if args.restart else "a", encoding="utf-8") as f:
+
+    prompt = args.minigpt_train_prompt
+    # ckpt_name = os.path.basename(args.minigpt_ckpt_save_path)
+    # if ckpt_name.endswith(".pth") and ckpt_name != "step_000000.pth":
+    #     prompt = args.minigpt_eval_caption_prompt
+    # else:
+    #     prompt = args.minigpt_train_prompt
+    with open(args.caption_eval_path, "w" if args.restart else "a", encoding="utf-8") as f:
         for batch in tqdm(dataloader):
             process_single(batch, model, prompt, output_fd=f)
 

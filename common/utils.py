@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Callable
+from typing import Any, Callable
 import torch, numpy
 from torch.utils.data import DataLoader, Dataset
 
@@ -110,3 +110,12 @@ class Logger:
 
     def clear(self):
         self.logs = {}
+
+
+def merge_dict_set(x: dict[Any, set], y: dict[Any, set]) -> dict[Any, set]:
+    ret = x.copy()
+    for k, v in y.items():
+        if k not in ret:
+            ret[k] = set()
+        ret[k].update(v)
+    return ret
