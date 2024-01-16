@@ -6,7 +6,7 @@ from __future__ import annotations
 import sys, os
 from huggingface_hub import snapshot_download
 
-model_name = "meta-llama/Llama-2-13b-chat-hf"
+model_name = sys.argv[1]
 
 
 def main():

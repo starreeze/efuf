@@ -118,6 +118,7 @@ parser.add_argument("--train_bs_neg", type=int, default=8, help="number of negat
 parser.add_argument("--train_lr", type=float, default=2e-5)
 parser.add_argument("--train_wd", type=float, default=0.05)
 parser.add_argument("--train_epoch", type=int, default=1)
+parser.add_argument("--train_dataloader_worker", type=int, default=0)
 
 ### minigpt
 parser.add_argument("--minigpt_infer_retry", type=int, default=3)
@@ -132,7 +133,6 @@ parser.add_argument(
     type=str,
     default="<Img><ImageHere></Img> Please describe the image in no more than 50 words. Make sure to be brief and concise.",
 )
-parser.add_argument("--train_dataloader_worker", type=int, default=0)
 # as context should not be counted in instruction, we need to remove prompt template from cfg and add it here
 parser.add_argument(
     "--minigpt_train_prompt", type=str, default="[INST] <Img><ImageHere></Img> Please describe the image. [/INST]"
@@ -151,6 +151,10 @@ parser.add_argument("--minigpt_ckpt_load_path", type=str, default="checkpoints/p
 parser.add_argument("--minigpt_ckpt_save_path", type=str, default="checkpoints/minigpt4_llama2_7b")
 
 ### instruct-blip
+parser.add_argument("--blip_train_prompt", type=str, default="Please describe the image.")
+# note that this should be modified in the config file, along with vicuna path
+parser.add_argument("--blip_ckpt_load_path", type=str, default="checkpoints/pretrained_blip_vicuna_7b.pth")
+parser.add_argument("--blip_ckpt_save_path", type=str, default="checkpoints/blip_vicuna_7b")
 
 # eval
 parser.add_argument("--pope_result_path", type=str, default="evaluate/pope/result")

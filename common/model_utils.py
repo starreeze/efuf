@@ -4,9 +4,6 @@
 
 from __future__ import annotations
 import os, torch
-from minigpt4.common.eval_utils import init_model
-from lavis.models import load_model_and_preprocess
-from common.args import minigpt4_finetune_parser
 
 
 def load_ckpt(model, ckpt, device):
@@ -17,15 +14,22 @@ def load_ckpt(model, ckpt, device):
 
 
 def load_minigpt(ckpt, device="cuda", args: list[str] = []) -> tuple[torch.nn.Module, torch.nn.Module]:
+    from common.args import minigpt4_finetune_parser
+    from minigpt4.common.eval_utils import init_model
+
     model, vis_processor = init_model(minigpt4_finetune_parser().parse_args(args), device)
     load_ckpt(model, ckpt, device)
     return model, vis_processor
 
 
 def load_blip(ckpt, device="cuda"):
+    from lavis.models import load_model_and_preprocess
+    from lavis.common.registry import registry
+
+    registry.register_path("library_root", "lavis")
     model, vis_processor, _ = load_model_and_preprocess("blip2_vicuna_instruct", "vicuna7b")
     load_ckpt(model, ckpt, device)
-    return model, vis_processor
+    return model, vis_processor["train"]  # type: ignore
 
 
 def main():

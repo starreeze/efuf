@@ -19,14 +19,14 @@ input_dict_name_map = {
 }
 
 
-def input_dict_to_model(input_dict, model):
-    return {input_dict_name_map[model][k]: v for k, v in input_dict.items()}
+def input_dict_to_model(input_dict):
+    get_model_key = lambda key, model_dict: model_dict[key] if key in model_dict else key
+    return {get_model_key(k, input_dict_name_map[args.model]): v for k, v in input_dict.items()}
 
 
 class GoldData(Dataset):
     def __init__(self, vis_processor, model="minigpt"):
         super(GoldData, self).__init__()
-        self.model = model
         self.model_prompt = getattr(args, f"{model}_train_prompt")
         self.vis_processor = vis_processor
         with open(os.path.join(args.annotation_path, "captions_train2014.json"), "r") as f:
@@ -41,7 +41,7 @@ class GoldData(Dataset):
         image_path = os.path.join(args.image_dir_path, image_name)
         image = self.vis_processor(Image.open(image_path).convert("RGB"))
         caption = t if (t := sample["caption"]).endswith(tuple(args.subsentence_splitter_set)) else t + "."
-        return input_dict_to_model({"image": image, "input": self.model_prompt, "output": caption}, self.model)
+        return input_dict_to_model({"image": image, "input": self.model_prompt, "output": caption})
 
 
 class PosNegData(Dataset):
@@ -78,7 +78,6 @@ class PosNegData(Dataset):
                 "output": target,
                 "score": sample["score"],
             },
-            self.model,
         )
 
 
@@ -102,7 +101,6 @@ class SentenceData(Dataset):
         image = self.vis_processor(Image.open(image_path).convert("RGB"))
         return input_dict_to_model(
             {"image": image, "input": self.model_prompt, "output": sample["sentence"], "score": sample["mean"]},
-            self.model,
         )
 
 

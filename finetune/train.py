@@ -113,17 +113,16 @@ def save_ckpt(model: torch.nn.Module, step: int):
         if k in param_grad_dic.keys() and not param_grad_dic[k]:
             # delete parameters that do not require gradient (vit, llama)
             del state_dict[k]
-    save_path = os.path.join(args.minigpt_ckpt_save_path, f"step_{step:06d}.pth")
+    ckpt_save_path = os.path.join(getattr(args, f"{args.model}_ckpt_save_path"), str(time()))
+    os.makedirs(ckpt_save_path, exist_ok=True)
+    save_path = os.path.join(ckpt_save_path, f"step_{step:06d}.pth")
     print(f"Saving checkpoint to {save_path} ...")
     torch.save(state_dict, save_path)
-    with open(os.path.join(args.minigpt_ckpt_save_path, "config.json"), "w") as f:
+    with open(os.path.join(ckpt_save_path, "config.json"), "w") as f:
         json.dump(vars(args), f, indent=2)
 
 
 def main():
-    args.minigpt_ckpt_save_path = os.path.join(args.minigpt_ckpt_save_path, str(time()))
-    os.makedirs(args.minigpt_ckpt_save_path, exist_ok=True)
-
     os.environ["WANDB_MODE"] = "offline"
     os.environ["http_proxy"] = os.environ["https_proxy"] = args.proxy
     wandb.init(project="lmm_hal", entity=args.wandb_user, name=args.model, config=vars(args), sync_tensorboard=False)
@@ -132,7 +131,6 @@ def main():
     if args.model == "minigpt":
         model, vis_processor = load_minigpt(args.minigpt_ckpt_load_path, "cpu", ["--cfg-path", args.minigpt_train_cfg])
     elif args.model == "blip":
-        # TODO add blip args, download ckpt
         model, vis_processor = load_blip(args.blip_ckpt_load_path, "cpu")
     else:
         raise ValueError("Invalid model.")
