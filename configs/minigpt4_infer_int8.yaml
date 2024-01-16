@@ -18,8 +18,7 @@ model:
 
   # generation configs
   prompt: ""
-
-  llama_model: "/home/nfs02/model/llama2/hf/Llama-2-7b-chat-hf"
+  llama_model: "/root/.cache/huggingface/hub/models--meta-llama--Llama-2-7b-chat-hf"
 
 preprocess:
   vis_processor:

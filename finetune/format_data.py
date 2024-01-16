@@ -78,11 +78,11 @@ def main():
     for sample in tqdm(zip(objects, scores), total=len(objects)):
         object, score = sample
         image_name, _, object = object.split(args.column_splitter)
-        if len(object.split(args.object_splitter)) != scores.shape[0] or scores.shape[0] == 0:
+        if len(object.split(args.object_splitter)) != score.shape[0] or score.shape[0] == 0:
             tqdm.write("objects and scores not match or empty objects! skipping...")
             continue
         caption = captions_d[image_name]
-        result = process_pos_neg(image_name, caption, object, scores)
+        result = process_pos_neg(image_name, caption, object, score)
         if result is not None:
             pos_neg.extend(result)
         sentence.append(

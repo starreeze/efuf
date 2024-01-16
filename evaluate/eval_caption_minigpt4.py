@@ -32,8 +32,8 @@ class CocoImageDataset(Dataset):
 
 def process_single(batch, model, prompt: str, output_fd: TextIOWrapper):
     images, image_names = batch
-    texts = [prompt] * args.minigpt_infer_bs_total
-    results = [""] * args.minigpt_infer_bs_total
+    texts = [prompt] * args.infer_bs_total
+    results = [""] * args.infer_bs_total
     filtered = []
     for _ in range(args.minigpt_infer_retry):
         answer = model.generate(images, texts, max_new_tokens=args.max_new_tokens)
@@ -57,7 +57,7 @@ def main():
     image_names = list(image_names)[args.start_pos : args.end_pos]
     dataloader = DataLoader(
         CocoImageDataset(image_names, vis_processor),
-        args.minigpt_infer_bs_total,
+        args.infer_bs_total,
         False,
         num_workers=args.infer_dataloader_worker,
     )

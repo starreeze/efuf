@@ -59,7 +59,7 @@ class MiniGPTPopeData(Dataset):
 def eval_minigpt(filename="result_pope_random.json"):
     model, vis_processor = load_minigpt(args.minigpt_ckpt_save_path)
     model.eval()
-    loader = DataLoader(MiniGPTPopeData(filename, vis_processor), args.minigpt_infer_bs_total, False)
+    loader = DataLoader(MiniGPTPopeData(filename, vis_processor), args.infer_bs_total, False)
     with torch.no_grad():
         results = []
         for batch in tqdm(loader):
