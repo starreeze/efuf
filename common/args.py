@@ -99,29 +99,29 @@ parser.add_argument("--infer_bs_multiply", type=int, default=2)
 parser.add_argument(
     "--train_bs_pos",
     type=int,
-    default=8,
+    default=4,
     help="number of positive samples (normal objects predicted by clip) in a batch",
 )
 parser.add_argument(
     "--train_bs_gold",
     type=int,
-    default=8,
+    default=4,
     help="number of positive samples (gold caption of COCO) in a batch",
 )
 parser.add_argument(
     "--train_bs_sent",
     type=int,
-    default=8,
+    default=4,
     help="number of positive samples (generated complete sentence) in a batch",
 )
-parser.add_argument("--train_bs_neg", type=int, default=8, help="number of negative samples in a batch")
+parser.add_argument("--train_bs_neg", type=int, default=4, help="number of negative samples in a batch")
 parser.add_argument("--train_lr", type=float, default=2e-5)
 parser.add_argument("--train_wd", type=float, default=0.05)
 parser.add_argument("--train_epoch", type=int, default=1)
 parser.add_argument("--train_dataloader_worker", type=int, default=0)
 
 ### minigpt
-parser.add_argument("--minigpt_infer_retry", type=int, default=3)
+parser.add_argument("--infer_retry", type=int, default=3)
 parser.add_argument(
     "--minigpt_infer_cfg", default="configs/minigpt4_infer_fp16.yaml", help="path to configuration file."
 )
@@ -169,6 +169,7 @@ parser.add_argument("--end_pos", type=int, default=int(1e10))
 parser.add_argument("--proxy", type=str, default="")
 parser.add_argument("--no_print_args", action="store_true")
 parser.add_argument("--dry_run", action="store_true")
+parser.add_argument("--no_first_eval", action="store_true")
 
 args = parser.parse_args()
 args.infer_bs_pos = args.train_bs_pos * args.infer_bs_multiply

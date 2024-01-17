@@ -35,7 +35,7 @@ def process_single(batch, model, output_fd: TextIOWrapper):
     texts = [args.minigpt_infer_prompt] * args.infer_bs_total
     results = [""] * args.infer_bs_total
     filtered = []
-    for _ in range(args.minigpt_infer_retry):
+    for _ in range(args.infer_retry):
         answer = model.generate(images, texts, max_new_tokens=args.max_new_tokens)
         for i, (name, answer) in enumerate(zip(image_names, answer)):
             if answer.replace("\n", "") and not results[i]:

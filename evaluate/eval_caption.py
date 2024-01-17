@@ -11,7 +11,7 @@ from io import TextIOWrapper
 from PIL import Image
 from tqdm import tqdm
 from torch.utils.data import DataLoader, Dataset
-from common.model_utils import load_minigpt
+from common.model_utils import load_minigpt, load_blip
 from common.args import args
 
 
@@ -35,7 +35,7 @@ def process_single(batch, model, prompt: str, output_fd: TextIOWrapper):
     texts = [prompt] * args.infer_bs_total
     results = [""] * args.infer_bs_total
     filtered = []
-    for _ in range(args.minigpt_infer_retry):
+    for _ in range(args.infer_retry):
         answer = model.generate(images, texts, max_new_tokens=args.max_new_tokens)
         for i, (name, answer) in enumerate(zip(image_names, answer)):
             if answer.replace("\n", "") and not results[i]:
@@ -48,7 +48,14 @@ def process_single(batch, model, prompt: str, output_fd: TextIOWrapper):
 
 
 def main():
-    model, vis_processor = load_minigpt(args.minigpt_ckpt_save_path)
+    if args.model == "minigpt":
+        model, vis_processor = load_minigpt(
+            args.minigpt_ckpt_load_path, args.device, ["--cfg-path", args.minigpt_train_cfg]
+        )
+    elif args.model == "blip":
+        model, vis_processor = load_blip(args.blip_ckpt_load_path, args.device)
+    else:
+        raise ValueError("Invalid model.")
     model.eval()
     with open(args.object_data_path, "r") as f:
         objects = f.read().splitlines()
@@ -62,7 +69,7 @@ def main():
         num_workers=args.infer_dataloader_worker,
     )
 
-    prompt = args.minigpt_train_prompt
+    prompt = getattr(args, f"{args.model}_train_prompt")
     # ckpt_name = os.path.basename(args.minigpt_ckpt_save_path)
     # if ckpt_name.endswith(".pth") and ckpt_name != "step_000000.pth":
     #     prompt = args.minigpt_eval_caption_prompt

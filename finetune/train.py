@@ -10,10 +10,10 @@ sys.path.append(os.path.dirname(SCRIPT_DIR))
 from common.utils import Logger, create_placeholder
 from common.args import args
 
-if args.device != "cpu":
-    placeholder = create_placeholder(45210)
-else:
-    placeholder = None
+# if args.device != "cpu":
+#     placeholder = create_placeholder(45210)
+# else:
+#     placeholder = None
 
 from tqdm import tqdm
 from time import time
@@ -82,7 +82,7 @@ def train(
     optimizer: AdamW,
 ):
     train_logger = Logger(wandb.log, "train")
-    model.train()
+    # model.train()
     num_step = len(train_loader_neg)
     eval_per_n_step = num_step // args.eval_per_epoch
     pos_w_scheduler = WeightScheduler(
@@ -97,7 +97,7 @@ def train(
             enumerate(zip(train_loader_pos, train_loader_gold, train_loader_sent, train_loader_neg)), total=num_step
         ):
             step = epoch * num_step + batch_idx
-            if step % eval_per_n_step == 0:
+            if step % eval_per_n_step == 0 and (step or not args.no_first_eval):
                 evaluate(model, valid_loader_pos, valid_loader_gold, valid_loader_sent, valid_loader_neg)
                 save_ckpt(model, step)
             train_step(
@@ -134,8 +134,8 @@ def main():
         model, vis_processor = load_blip(args.blip_ckpt_load_path, "cpu")
     else:
         raise ValueError("Invalid model.")
-    global placeholder
-    del placeholder
+    # global placeholder
+    # del placeholder
     model = model.to(args.device)
     print("resumed the checkpoint.")
 

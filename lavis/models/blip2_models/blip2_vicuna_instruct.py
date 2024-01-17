@@ -131,7 +131,7 @@ class Blip2VicunaInstruct(Blip2Base):
         llm_tokens["attention_mask"] = torch.stack(llm_tokens["attention_mask"])
         return llm_tokens, input_part_targets_len
 
-    def forward(self, samples, reduction="mean", add_end_sym=True):
+    def forward(self, samples, add_end_sym: list[bool], reduction="mean"):
         # print('-----------------')
         # print(samples["text_input"])
         # print(samples["text_output"])
@@ -187,7 +187,7 @@ class Blip2VicunaInstruct(Blip2Base):
 
         self.llm_tokenizer.truncation_side = "right"
         text_output_tokens = self.llm_tokenizer(
-            [t + self.llm_tokenizer.eos_token if add_end_sym else t for t in samples["text_output"]],
+            [t + self.llm_tokenizer.eos_token if aes else t for t, aes in zip(samples["text_output"], add_end_sym)],
             return_tensors="pt",
             padding="longest",
             truncation=True,

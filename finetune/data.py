@@ -41,7 +41,9 @@ class GoldData(Dataset):
         image_path = os.path.join(args.image_dir_path, image_name)
         image = self.vis_processor(Image.open(image_path).convert("RGB"))
         caption = t if (t := sample["caption"]).endswith(tuple(args.subsentence_splitter_set)) else t + "."
-        return input_dict_to_model({"image": image, "input": self.model_prompt, "output": caption})
+        return input_dict_to_model(
+            {"image": image, "input": self.model_prompt, "output": caption, "score": args.gold_clip_score}
+        )
 
 
 class PosNegData(Dataset):
