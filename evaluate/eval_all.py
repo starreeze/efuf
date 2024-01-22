@@ -7,12 +7,14 @@ import sys, os
 
 
 def caption():
-    ckpt_dir = sys.argv[2]
+    model, ckpt_dir = sys.argv[2:]
     output_path = "eval_caption"
     for file in os.listdir(ckpt_dir):
+        if "pretrained" in file:
+            continue
         ckpt = os.path.join(ckpt_dir, file)
         os.system(
-            f"python evaluate/eval_caption_minigpt4.py --minigpt_ckpt_save_path {ckpt} "
+            f"python evaluate/eval_caption.py --model {model} --{model}_ckpt_load_path {ckpt} "
             f"--caption_eval_path {output_path}_{file}.txt --no_print_args"
         )
 

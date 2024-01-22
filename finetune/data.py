@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 # @Date    : 2024-01-15 19:33:09
 # @Author  : Shangyu.Xing (starreeze@foxmail.com)
+"common data loader, without specific model configuration"
 
 from __future__ import annotations
 import os, sys, json
@@ -8,20 +9,10 @@ import os, sys, json
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 from common.utils import ContinuousDataLoader
+from common.models import data_maps, sample_collators
 from common.args import args
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset, random_split
-
-
-input_dict_name_map = {
-    "minigpt": {"image": "image", "input": "instruction_input", "output": "answer"},
-    "blip": {"image": "image", "input": "text_input", "output": "text_output"},
-}
-
-
-def input_dict_to_model(input_dict):
-    get_model_key = lambda key, model_dict: model_dict[key] if key in model_dict else key
-    return {get_model_key(k, input_dict_name_map[args.model]): v for k, v in input_dict.items()}
 
 
 class GoldData(Dataset):
@@ -41,7 +32,7 @@ class GoldData(Dataset):
         image_path = os.path.join(args.image_dir_path, image_name)
         image = self.vis_processor(Image.open(image_path).convert("RGB"))
         caption = t if (t := sample["caption"]).endswith(tuple(args.subsentence_splitter_set)) else t + "."
-        return input_dict_to_model(
+        return data_maps[args.model](
             {"image": image, "input": self.model_prompt, "output": caption, "score": args.gold_clip_score}
         )
 
@@ -72,7 +63,7 @@ class PosNegData(Dataset):
         image = self.vis_processor(Image.open(image_path).convert("RGB"))
         pos = sample["position"]
         context, target = sample["sentence"][:pos], sample["sentence"][pos:]
-        return input_dict_to_model(
+        return data_maps[args.model](
             {
                 "image": image,
                 # this should be the full instruction, as prompt template in train cfg is {}
@@ -80,6 +71,7 @@ class PosNegData(Dataset):
                 "output": target,
                 "score": sample["score"],
             },
+            add_end_sym=False,
         )
 
 
@@ -101,7 +93,7 @@ class SentenceData(Dataset):
         sample = self.data[index]
         image_path = os.path.join(args.image_dir_path, sample["image"])
         image = self.vis_processor(Image.open(image_path).convert("RGB"))
-        return input_dict_to_model(
+        return data_maps[args.model](
             {"image": image, "input": self.model_prompt, "output": sample["sentence"], "score": sample["mean"]},
         )
 
@@ -118,8 +110,12 @@ def load_datasets(vis_processor, train_bs, valid_bs, type, continuous=False):
     valid_size = int(args.valid_data_split * len(dataset))
     train, valid = random_split(dataset, [len(dataset) - valid_size, valid_size])
     if continuous:
-        train_loader = ContinuousDataLoader(train, train_bs, shuffle=True, drop_last=True)
+        train_loader = ContinuousDataLoader(
+            train, train_bs, shuffle=True, drop_last=True, collate_fn=sample_collators[args.model]
+        )
     else:
-        train_loader = DataLoader(train, train_bs, shuffle=True, drop_last=True)
-    valid_loader = DataLoader(valid, valid_bs, shuffle=False, drop_last=True)
+        train_loader = DataLoader(
+            train, train_bs, shuffle=True, drop_last=True, collate_fn=sample_collators[args.model]
+        )
+    valid_loader = DataLoader(valid, valid_bs, shuffle=False, drop_last=True, collate_fn=sample_collators[args.model])
     return train_loader, valid_loader

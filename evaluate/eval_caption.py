@@ -3,7 +3,7 @@
 # @Author  : Shangyu.Xing (starreeze@foxmail.com)
 
 from __future__ import annotations
-import os, sys
+import os, sys, torch
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
@@ -11,7 +11,7 @@ from io import TextIOWrapper
 from PIL import Image
 from tqdm import tqdm
 from torch.utils.data import DataLoader, Dataset
-from common.model_utils import load_minigpt, load_blip
+from common.models import load_minigpt, load_blip, load_llava, generators
 from common.args import args
 
 
@@ -26,8 +26,10 @@ class CocoImageDataset(Dataset):
 
     def __getitem__(self, index):
         image_path = os.path.join(args.image_dir_path, self.image_names[index])
-        img = Image.open(image_path).convert("RGB")
-        return self.processor(img), self.image_names[index]
+        img = self.processor(Image.open(image_path).convert("RGB"))
+        if args.device != "cpu":
+            img = img.to(torch.float16).to(args.device)
+        return img, self.image_names[index]
 
 
 def process_single(batch, model, prompt: str, output_fd: TextIOWrapper):
@@ -36,8 +38,9 @@ def process_single(batch, model, prompt: str, output_fd: TextIOWrapper):
     results = [""] * args.infer_bs_total
     filtered = []
     for _ in range(args.infer_retry):
-        answer = model.generate(images, texts, max_new_tokens=args.max_new_tokens)
-        for i, (name, answer) in enumerate(zip(image_names, answer)):
+        with torch.no_grad():
+            answers = generators[args.model](model, texts, images)
+        for i, (name, answer) in enumerate(zip(image_names, answers)):
             if answer.replace("\n", "") and not results[i]:
                 results[i] = name + " ### " + answer.replace("\n", " ")
         filtered = [r for r in results if r]
@@ -50,13 +53,14 @@ def process_single(batch, model, prompt: str, output_fd: TextIOWrapper):
 def main():
     if args.model == "minigpt":
         model, vis_processor = load_minigpt(
-            args.minigpt_ckpt_load_path, args.device, ["--cfg-path", args.minigpt_train_cfg]
+            args.minigpt_ckpt_load_path, args.device, model_args=["--cfg-path", args.minigpt_train_cfg]
         )
     elif args.model == "blip":
         model, vis_processor = load_blip(args.blip_ckpt_load_path, args.device)
+    elif args.model == "llava":
+        model, vis_processor = load_llava(args.llava_ckpt_load_path, args.device)
     else:
         raise ValueError("Invalid model.")
-    model.eval()
     with open(args.object_data_path, "r") as f:
         objects = f.read().splitlines()
     images_used = {obj.split(args.column_splitter)[0] for obj in objects}
@@ -69,7 +73,7 @@ def main():
         num_workers=args.infer_dataloader_worker,
     )
 
-    prompt = getattr(args, f"{args.model}_train_prompt")
+    prompt = getattr(args, f"{args.model}_eval_prompt")
     # ckpt_name = os.path.basename(args.minigpt_ckpt_save_path)
     # if ckpt_name.endswith(".pth") and ckpt_name != "step_000000.pth":
     #     prompt = args.minigpt_eval_caption_prompt

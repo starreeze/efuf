@@ -238,8 +238,8 @@ class Blip2VicunaInstruct(Blip2Base):
         max_length=256,
         min_length=1,
         top_p=0.9,
-        repetition_penalty=1.5,
-        length_penalty=1,
+        repetition_penalty=1.15,
+        length_penalty=0,
         num_captions=1,
         temperature=1,
     ):

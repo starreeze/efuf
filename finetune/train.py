@@ -19,7 +19,7 @@ from tqdm import tqdm
 from time import time
 from torch.utils.data import DataLoader
 from torch.optim import AdamW
-from common.model_utils import load_minigpt, load_blip
+from common.models import load_minigpt, load_blip, load_llava
 from finetune.data import load_datasets
 from finetune.loss import get_loss, WeightScheduler, get_loss_eval
 
@@ -113,13 +113,13 @@ def save_ckpt(model: torch.nn.Module, step: int):
         if k in param_grad_dic.keys() and not param_grad_dic[k]:
             # delete parameters that do not require gradient (vit, llama)
             del state_dict[k]
-    ckpt_save_path = os.path.join(getattr(args, f"{args.model}_ckpt_save_path"), str(time()))
-    os.makedirs(ckpt_save_path, exist_ok=True)
-    save_path = os.path.join(ckpt_save_path, f"step_{step:06d}.pth")
+    os.makedirs(args.ckpt_save_path, exist_ok=True)
+    save_path = os.path.join(args.ckpt_save_path, f"step_{step:06d}.pth")
     print(f"Saving checkpoint to {save_path} ...")
     torch.save(state_dict, save_path)
-    with open(os.path.join(ckpt_save_path, "config.json"), "w") as f:
-        json.dump(vars(args), f, indent=2)
+    with open(os.path.join(args.ckpt_save_path, "config.json"), "w") as f:
+        config = {k: v for k, v in vars(args).items() if isinstance(v, (int, float, str, bool, type(None)))}
+        json.dump(config, f, indent=2)
 
 
 def main():
@@ -128,15 +128,19 @@ def main():
     wandb.init(project="lmm_hal", entity=args.wandb_user, name=args.model, config=vars(args), sync_tensorboard=False)
     print("W&B initialized.")
 
+    args.train_dtype = getattr(torch, args.train_dtype_str)
     if args.model == "minigpt":
-        model, vis_processor = load_minigpt(args.minigpt_ckpt_load_path, "cpu", ["--cfg-path", args.minigpt_train_cfg])
+        model, vis_processor = load_minigpt(
+            args.minigpt_ckpt_load_path, args.device, True, ["--cfg-path", args.minigpt_train_cfg]
+        )
     elif args.model == "blip":
-        model, vis_processor = load_blip(args.blip_ckpt_load_path, "cpu")
+        model, vis_processor = load_blip(args.blip_ckpt_load_path, args.device, True)
+    elif args.model == "llava":
+        model, vis_processor = load_llava(args.llava_ckpt_load_path, args.device, True)
     else:
         raise ValueError("Invalid model.")
     # global placeholder
     # del placeholder
-    model = model.to(args.device)
     print("resumed the checkpoint.")
 
     train_pos, valid_pos = load_datasets(vis_processor, args.train_bs_pos, args.infer_bs_pos, type=1, continuous=True)
@@ -153,6 +157,7 @@ def main():
 
     if args.dry_run:
         exit(0)
+    args.ckpt_save_path = os.path.join(getattr(args, f"{args.model}_ckpt_save_path"), str(time()))
     train(model, train_pos, train_gold, train_sent, train_neg, valid_pos, valid_gold, valid_sent, valid_neg, optim)
     evaluate(model, valid_pos, valid_gold, valid_sent, valid_neg)
     save_ckpt(model, len(train_neg))

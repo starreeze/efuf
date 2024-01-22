@@ -13,7 +13,7 @@ from PIL import Image
 from tqdm import tqdm
 from torch.utils.data import DataLoader, Dataset
 from common.args import args
-from common.model_utils import load_minigpt
+from common.models import load_minigpt
 from common.utils import to_device
 
 eval_data_path = os.path.abspath(os.path.join(args.pope_result_path, "data.json"))

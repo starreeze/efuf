@@ -57,35 +57,32 @@ def create_placeholder(size_mb=30845, device="cuda"):
     return torch.empty([size_mb, 1024, 1024], device=device, dtype=torch.int8)
 
 
-def to_device(batch, device="cuda"):
+def to_device(batch, device="cuda", dtype=None):
+    "dtype conversion for tensors will only be applied within the same basic type (e.g. int, float)"
     if batch is None:
         return None
     try:
-        return {k: to_device(v, device) for k, v in batch.items()}
+        return {k: to_device(v, device, dtype) for k, v in batch.items()}
     except AttributeError:
         pass
     if isinstance(batch, list):
-        return [to_device(x, device) for x in batch]
+        return [to_device(x, device, dtype) for x in batch]
     if isinstance(batch, tuple):
-        return tuple(to_device(x, device) for x in batch)  # type: ignore
+        return tuple(to_device(x, device, dtype) for x in batch)  # type: ignore
     if isinstance(batch, torch.Tensor):
-        return batch.to(device)
+        batch = batch.to(device)
+        if dtype is not None and (
+            torch.is_floating_point(batch) == torch.is_floating_point(torch.tensor([], dtype=dtype))
+        ):
+            batch = batch.to(dtype)
+        return batch
     if isinstance(batch, numpy.ndarray):
-        return torch.tensor(batch, device=device)
+        batch = torch.tensor(batch, device=device)
+        if dtype is not None:
+            batch = batch.to(dtype)
+        return batch
     return batch
     # raise NotImplementedError(f"Unknown type when casting to device: {type(batch).__name__}")
-
-
-def concat_dict(*args):
-    ret = {}
-    for k in args[0].keys():
-        if isinstance(args[0][k], torch.Tensor):
-            ret[k] = torch.cat([x[k] for x in args])
-        elif isinstance(args[0][k], list):
-            ret[k] = sum([x[k] for x in args], [])
-        else:
-            raise NotImplementedError(f"Unknown type when concatenating: {type(args[0][k]).__name__}")
-    return ret
 
 
 class Logger:

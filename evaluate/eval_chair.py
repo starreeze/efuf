@@ -155,7 +155,11 @@ def main():
         content: list[str] = f.read().splitlines()
     image_ids, captions = [], []
     for line in content:
-        image_name, caption = line.split(args.column_splitter)
+        try:
+            image_name, caption = line.split(args.column_splitter)
+        except ValueError as e:
+            print(f"Skipping line {line} due to {e}")
+            continue
         image_ids.append(int(image_name.split("_")[-1].split(".")[0]))
         captions.append(caption)
 

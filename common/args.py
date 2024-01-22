@@ -75,8 +75,8 @@ parser.add_argument(
 parser.add_argument("--gold_clip_score", type=float, default=40, help="clip score of the gold caption")
 
 parser.add_argument("--neg_w_start", type=float, default=0.3)
-parser.add_argument("--neg_w_end", type=float, default=0)
-parser.add_argument("--neg_w_start_step_pos", type=float, default=0.4)
+parser.add_argument("--neg_w_end", type=float, default=0.1)
+parser.add_argument("--neg_w_start_step_pos", type=float, default=0.5)
 parser.add_argument("--neg_w_sched_type", type=str, default="linear")
 parser.add_argument("--pos_w_start", type=float, default=1)
 parser.add_argument("--pos_w_end", type=float, default=0.5)
@@ -99,22 +99,22 @@ parser.add_argument("--infer_bs_multiply", type=int, default=2)
 parser.add_argument(
     "--train_bs_pos",
     type=int,
-    default=4,
+    default=3,
     help="number of positive samples (normal objects predicted by clip) in a batch",
 )
 parser.add_argument(
     "--train_bs_gold",
     type=int,
-    default=4,
+    default=3,
     help="number of positive samples (gold caption of COCO) in a batch",
 )
 parser.add_argument(
     "--train_bs_sent",
     type=int,
-    default=4,
+    default=3,
     help="number of positive samples (generated complete sentence) in a batch",
 )
-parser.add_argument("--train_bs_neg", type=int, default=4, help="number of negative samples in a batch")
+parser.add_argument("--train_bs_neg", type=int, default=3, help="number of negative samples in a batch")
 parser.add_argument("--train_lr", type=float, default=2e-5)
 parser.add_argument("--train_wd", type=float, default=0.05)
 parser.add_argument("--train_epoch", type=int, default=1)
@@ -138,23 +138,44 @@ parser.add_argument(
     "--minigpt_train_prompt", type=str, default="[INST] <Img><ImageHere></Img> Please describe the image. [/INST]"
 )
 parser.add_argument(
-    "--minigpt_eval_caption_prompt",
+    "--minigpt_eval_prompt",
     type=str,
-    default="[INST] <Img><ImageHere></Img> Please describe the image in great detail. Your response should have at least 50 words. [/INST]",
+    default="[INST] <Img><ImageHere></Img> Please describe the image in great detail. Your response should have at least 100 words. [/INST]",
 )
 parser.add_argument(
     "--minigpt_eval_pope_prompt",
     type=str,
     default="[INST] <Img><ImageHere></Img> According to the given image, answer yes or no to the question faithfully: {question} [/INST]",
 )
-parser.add_argument("--minigpt_ckpt_load_path", type=str, default="checkpoints/pretrained_minigpt4_llama2_7b.pth")
+parser.add_argument("--minigpt_ckpt_load_path", type=str, default="checkpoints/minigpt4_llama2_7b/pretrained.pth")
 parser.add_argument("--minigpt_ckpt_save_path", type=str, default="checkpoints/minigpt4_llama2_7b")
 
 ### instruct-blip
 parser.add_argument("--blip_train_prompt", type=str, default="Please describe the image.")
+parser.add_argument(
+    "--blip_eval_prompt",
+    type=str,
+    default="Please describe the image in great detail. Your response should have at least 100 words.",
+)
 # note that this should be modified in the config file, along with vicuna path
-parser.add_argument("--blip_ckpt_load_path", type=str, default="checkpoints/pretrained_blip_vicuna_7b.pth")
+parser.add_argument("--blip_ckpt_load_path", type=str, default="checkpoints/blip_vicuna_7b/pretrained.pth")
 parser.add_argument("--blip_ckpt_save_path", type=str, default="checkpoints/blip_vicuna_7b")
+
+### llava
+parser.add_argument(
+    "--llava_train_prompt", type=str, default="### human: <image>\n Please describe the image. \n### gpt:"
+)
+parser.add_argument(
+    "--llava_eval_prompt",
+    type=str,
+    default="### human: <image>\n Please describe the image in great detail. Your response should have at least 100 words. \n### gpt:",
+)
+parser.add_argument(
+    "--llava_ckpt_load_path",
+    type=str,
+    default="/root/.cache/huggingface/hub/models--liuhaotian--llava-v1.5-7b/snapshots/12e054b30e8e061f423c7264bc97d4248232e965",
+)
+parser.add_argument("--llava_ckpt_save_path", type=str, default="checkpoints/llava_vicuna_7b")
 
 # eval
 parser.add_argument("--pope_result_path", type=str, default="evaluate/pope/result")
@@ -167,6 +188,7 @@ parser.add_argument("--seed", type=int, default=28509)
 parser.add_argument("--start_pos", type=int, default=0)
 parser.add_argument("--end_pos", type=int, default=int(1e10))
 parser.add_argument("--proxy", type=str, default="")
+parser.add_argument("--train_dtype_str", type=str, default="bfloat16")
 parser.add_argument("--no_print_args", action="store_true")
 parser.add_argument("--dry_run", action="store_true")
 parser.add_argument("--no_first_eval", action="store_true")

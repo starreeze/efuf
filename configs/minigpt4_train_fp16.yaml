@@ -14,7 +14,7 @@ model:
   end_sym: "</s>"
   low_resource: False
   prompt_template: "{}"
-  ckpt: "checkpoints/pretrained_minigpt4_llama2_7b.pth"
+  ckpt: "checkpoints/minigpt4_llama2_7b/pretrained.pth"
 
   # generation configs
   prompt: ""

@@ -8,7 +8,7 @@ model:
   load_finetuned: False
   load_pretrained: True
 
-  pretrained: "checkpoints/pretrained_blip_vicuna_7b.pth"
+  pretrained: "checkpoints/blip_vicuna_7b/pretrained.pth"
   finetuned: ""
 
   # vit encoder
@@ -22,7 +22,7 @@ model:
   num_query_token: 32
 
   # path to Vicuna checkpoint
-  llm_model: "/root/.cache/huggingface/hub/models--lmsys--vicuna-7b-v1.5"
+  llm_model: "/root/.cache/huggingface/hub/models--lmsys--vicuna-7b-v1.1/snapshots/694d39416b1744d939760f5257c4bb08b2fae400"
 
   # generation configs
   prompt: ""
