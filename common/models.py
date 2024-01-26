@@ -33,7 +33,7 @@ def load_minigpt(
     return model, vis_processor
 
 
-def load_blip(ckpt, device="cuda", train=False):
+def load_blip(ckpt, device="cuda", train=False, model_args: list[str] = []):
     from lavis.models import load_model_and_preprocess
     from lavis.common.registry import registry
     from lavis.models.blip2_models.blip2 import disabled_train
@@ -54,8 +54,8 @@ def load_blip(ckpt, device="cuda", train=False):
     return model, vis_processor["train"]  # type: ignore
 
 
-def load_llava(ckpt, device="cuda", train=False):
-    return llava_process.load(ckpt, device, train)
+def load_llava(ckpt, device="cuda", train=False, model_args: list[str] = []):
+    return llava_model.load(ckpt, device, train)
 
 
 def minigpt_data_map(inputs: dict, add_end_sym=None) -> dict:
@@ -86,7 +86,6 @@ def blip_generate(model, texts, images):
         res = model.generate(
             {"prompt": [text], "image": image.unsqueeze(0)},
             max_length=args.max_new_tokens,
-            length_penalty=2,
             temperature=0.9,
             use_nucleus_sampling=True,
         )
@@ -114,21 +113,40 @@ class LlavaModel:
         from llava.mm_utils import tokenizer_image_token
         from llava.constants import IGNORE_INDEX
 
+        torch.autograd.set_detect_anomaly(True)  # type: ignore
         self.ignore_value = IGNORE_INDEX
         self.tokenizer, model, vis_processor, _ = load_pretrained_model(
             args.llava_ckpt_load_path,
             model_name="llava-v1.5-7b",
             device_map={"": device},  # type: ignore
+            device=device,
             torch_dtype=args.train_dtype if train else torch.float16,
         )
         self.tokenize_image = partial(tokenizer_image_token, tokenizer=self.tokenizer, return_tensors="pt")
         load_ckpt(model, ckpt, device)
         model.train(train)
-        for param in model.parameters():
-            param.requires_grad = False
-        if train:
-            for param in model.model.mm_projector.parameters():
-                param.requires_grad = True
+        freeze_modules: list[torch.nn.Module] = [
+            model.model.vision_tower,
+            model.model.embed_tokens,
+            model.model.norm,
+            model.model.layers,
+            model.lm_head,
+        ]
+        for module in freeze_modules:
+            for param in module.parameters():
+                param.requires_grad = False
+
+        ### This is for debugging only
+        def print_grad_hook(self, grad_input, grad_output, name=""):
+            print("Inside " + name + " backward")
+            print("grad_input: ", grad_input)
+            print("grad_output: ", grad_output)
+
+        model.lm_head.register_backward_hook(partial(print_grad_hook, name="lm_head"))
+        model.model.norm.register_backward_hook(partial(print_grad_hook, name="norm"))
+        model.model.layers.register_backward_hook(partial(print_grad_hook, name="layers"))
+        model.model.mm_projector.register_backward_hook(partial(print_grad_hook, name="projector"))
+        ### end debugging
         return model, lambda x: vis_processor.preprocess(x, return_tensors="pt")["pixel_values"][0]
 
     def data_map(self, inputs: dict, add_end_sym=True) -> dict:
@@ -220,31 +238,37 @@ class LlavaModel:
         return ret
 
 
-llava_process = LlavaModel()
+llava_model = LlavaModel()
+
+model_loaders = {
+    "minigpt": load_minigpt,
+    "blip": load_blip,
+    "llava": llava_model.load,
+}
 data_maps = {
     "minigpt": minigpt_data_map,
     "blip": blip_data_map,
-    "llava": llava_process.data_map,
+    "llava": llava_model.data_map,
 }
 sample_collators = {
     "minigpt": None,
     "blip": None,
-    "llava": llava_process.collator,
+    "llava": llava_model.collator,
 }
 batch_collators = {
     "minigpt": merge_batch_collator,
     "blip": merge_batch_collator,
-    "llava": llava_process.pad_batch_collator,
+    "llava": llava_model.pad_batch_collator,
 }
 generators = {
     "minigpt": minigpt_generate,
     "blip": blip_generate,
-    "llava": llava_process.generate,
+    "llava": llava_model.generate,
 }
 model_forward = {
     "minigpt": lambda model, samples, add_end_sym: model(samples, add_end_sym=add_end_sym, reduction="none")["loss"],
     "blip": lambda model, samples, add_end_sym: model(samples, add_end_sym=add_end_sym, reduction="none")["loss"],
-    "llava": llava_process.forward,
+    "llava": llava_model.forward,
 }
 
 

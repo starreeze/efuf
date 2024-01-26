@@ -19,7 +19,7 @@ from tqdm import tqdm
 from time import time
 from torch.utils.data import DataLoader
 from torch.optim import AdamW
-from common.models import load_minigpt, load_blip, load_llava
+from common.models import model_loaders
 from finetune.data import load_datasets
 from finetune.loss import get_loss, WeightScheduler, get_loss_eval
 
@@ -99,7 +99,8 @@ def train(
             step = epoch * num_step + batch_idx
             if step % eval_per_n_step == 0 and (step or not args.no_first_eval):
                 evaluate(model, valid_loader_pos, valid_loader_gold, valid_loader_sent, valid_loader_neg)
-                save_ckpt(model, step)
+                if step:
+                    save_ckpt(model, step)
             train_step(
                 model, pos, gold, sent, neg, step, epoch, pos_w_scheduler, neg_w_scheduler, optimizer, train_logger
             )
@@ -129,16 +130,9 @@ def main():
     print("W&B initialized.")
 
     args.train_dtype = getattr(torch, args.train_dtype_str)
-    if args.model == "minigpt":
-        model, vis_processor = load_minigpt(
-            args.minigpt_ckpt_load_path, args.device, True, ["--cfg-path", args.minigpt_train_cfg]
-        )
-    elif args.model == "blip":
-        model, vis_processor = load_blip(args.blip_ckpt_load_path, args.device, True)
-    elif args.model == "llava":
-        model, vis_processor = load_llava(args.llava_ckpt_load_path, args.device, True)
-    else:
-        raise ValueError("Invalid model.")
+    model_load_path = getattr(args, f"{args.model}_ckpt_load_path")
+    model_args = ["--cfg-path", args.minigpt_train_cfg] if args.model == "minigpt" else []
+    model, vis_processor = model_loaders[args.model](model_load_path, args.device, True, model_args)
     # global placeholder
     # del placeholder
     print("resumed the checkpoint.")

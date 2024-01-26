@@ -6,6 +6,7 @@
 from __future__ import annotations
 import sys, os, nltk, json
 from typing import Iterable
+from tqdm import tqdm
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
@@ -44,7 +45,7 @@ class CHAIR(object):
         image_id_to_objects: dict[int, set[str]] = {
             c["image_id"]: set() for c in captions if c["image_id"] in self.image_ids
         }
-        for c in captions:
+        for c in tqdm(captions):
             if c["image_id"] in self.image_ids:
                 image_id_to_objects[c["image_id"]].update(self.caption_to_objects(c["caption"])[1])
         return image_id_to_objects
@@ -151,6 +152,7 @@ class CHAIR(object):
 
 
 def main():
+    args.no_print_args = True
     with open(args.caption_eval_path, "r") as f:
         content: list[str] = f.read().splitlines()
     image_ids, captions = [], []

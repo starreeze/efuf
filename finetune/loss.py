@@ -80,6 +80,16 @@ def get_loss(
     neg_w_scheduler: WeightScheduler,
 ):
     pos, gold, sent, neg = to_device([pos, gold, sent, neg], args.device, args.train_dtype)  # type: ignore
+    #####################
+    samples = pos
+    loss = model(
+        images=samples["image"],
+        input_ids=samples["input_ids"],
+        attention_mask=samples["attention_mask"],
+        labels=samples["labels"],
+        return_dict=True,
+    )["loss"]
+    return [loss] * 5
     loss_pos, loss_gold, loss_sent, loss_neg = batch_forward(
         model, [False, True, True, False], pos, gold, sent, neg, reduction="none"
     )
