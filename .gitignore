@@ -1,4 +1,4 @@
-dataset
+dataset/data
 __pycache__
 checkpoint*
 tmp.txt
