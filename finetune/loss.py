@@ -61,7 +61,7 @@ def batch_forward(model, end_sym: list[bool], *inputs, reduction="mean"):
     assert model_inputs["image"].shape[0] == len(end_sym_per_sample)
     with autocast(dtype=args.train_dtype):
         loss = model_forward[args.model](model, model_inputs, end_sym_per_sample)
-    loss = torch.split(loss, loss.shape[0] // len(inputs))
+    loss = torch.split(loss, bs)
     if reduction == "none":
         return loss
     if reduction == "mean":
@@ -81,15 +81,8 @@ def get_loss(
 ):
     pos, gold, sent, neg = to_device([pos, gold, sent, neg], args.device, args.train_dtype)  # type: ignore
     #####################
-    samples = pos
-    loss = model(
-        images=samples["image"],
-        input_ids=samples["input_ids"],
-        attention_mask=samples["attention_mask"],
-        labels=samples["labels"],
-        return_dict=True,
-    )["loss"]
-    return [loss] * 5
+    # loss = model_forward[args.model](model, pos, [False] * pos["image"].shape[0])
+    # return [loss] * 5
     loss_pos, loss_gold, loss_sent, loss_neg = batch_forward(
         model, [False, True, True, False], pos, gold, sent, neg, reduction="none"
     )

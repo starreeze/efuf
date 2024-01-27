@@ -4,10 +4,12 @@
 "specific model behavior (model loading, data processing, etc.)"
 
 from __future__ import annotations
-import os, torch
+import os, torch, transformers
 from functools import partial
 from torch.nn import CrossEntropyLoss
 from common.args import args
+from dataclasses import dataclass, field
+from typing import Optional
 
 
 def load_ckpt(model, ckpt, device="cuda"):
@@ -107,26 +109,120 @@ def merge_batch_collator(*inputs: dict):
 
 
 class LlavaModel:
-    # only llava.model.builder is modified
+    # No modification made to llava 1.5
+    # Below is modified from
+    @dataclass
+    class ModelArguments:
+        model_name_or_path: Optional[str] = field(default=args.llava_ckpt_load_path)
+        version: Optional[str] = field(default="v1")
+        freeze_backbone: bool = field(default=True)
+        tune_mm_mlp_adapter: bool = field(default=True)
+        vision_tower: Optional[str] = field(default="openai/clip-vit-large-patch14-336")
+        mm_vision_select_layer: Optional[int] = field(default=-2)  # default to the last layer
+        pretrain_mm_mlp_adapter: Optional[str] = field(
+            default=os.path.join(args.llava_ckpt_load_path, "mm_projector.bin")
+        )
+        mm_projector_type: Optional[str] = field(default="mlp2x_gelu")
+        mm_use_im_start_end: bool = field(default=False)
+        mm_use_im_patch_token: bool = field(default=False)
+        mm_vision_select_feature: Optional[str] = field(default="patch")
+
+    @dataclass
+    class DataArguments:
+        lazy_preprocess: bool = True
+        is_multimodal: bool = True
+        image_aspect_ratio: str = "pad"
+
+    @dataclass
+    class TrainingArguments(transformers.TrainingArguments):
+        optim: str = field(default="adamw_torch")
+        remove_unused_columns: bool = field(default=False)
+        freeze_mm_mlp_adapter: bool = field(default=False)
+        mpt_attn_impl: Optional[str] = field(default="triton")
+        model_max_length: int = field(
+            default=4096,
+            metadata={"help": "Maximum sequence length. Sequences will be right padded (and possibly truncated)."},
+        )
+        double_quant: bool = field(
+            default=True, metadata={"help": "Compress the quantization statistics through double quantization."}
+        )
+        quant_type: str = field(
+            default="nf4", metadata={"help": "Quantization data type to use. Should be one of `fp4` or `nf4`."}
+        )
+        bits: int = field(default=16, metadata={"help": "How many bits to use."})
+        lora_enable: bool = False
+        lora_r: int = 64
+        lora_alpha: int = 16
+        lora_dropout: float = 0.05
+        lora_weight_path: str = ""
+        lora_bias: str = "none"
+        mm_projector_lr: Optional[float] = None
+        group_by_modality_length: bool = field(default=True)
+
     def load(self, ckpt, device="cuda", train=False):
-        from llava.model.builder import load_pretrained_model
+        from llava.model.language_model.llava_llama import LlavaLlamaForCausalLM
+
+        parser = transformers.HfArgumentParser((self.ModelArguments, self.DataArguments, self.TrainingArguments))  # type: ignore
+        model_args, data_args, training_args = parser.parse_args_into_dataclasses(
+            ["--output_dir", args.llava_ckpt_save_path]
+        )
+
+        cache_dir = "/tmp"
+        model: LlavaLlamaForCausalLM = LlavaLlamaForCausalLM.from_pretrained(
+            args.llava_ckpt_load_path, cache_dir=cache_dir, device_map={"": device}, torch_dtype=args.train_dtype
+        )  # type: ignore
+        model.config.use_cache = False
+        model.model.requires_grad_(False)
+
+        tokenizer = transformers.AutoTokenizer.from_pretrained(
+            args.llava_ckpt_load_path,
+            cache_dir=cache_dir,
+            model_max_length=training_args.model_max_length,
+            padding_side="right",
+            use_fast=False,
+        )
+        tokenizer.pad_token = tokenizer.unk_token
+
+        model.get_model().initialize_vision_modules(model_args=model_args, fsdp=training_args.fsdp)
+
+        vision_tower = model.get_vision_tower()
+        vision_tower.to(dtype=args.train_dtype, device=device)
+
+        model.config.image_aspect_ratio = data_args.image_aspect_ratio
+        model.config.tokenizer_padding_side = tokenizer.padding_side
+        model.config.tokenizer_model_max_length = tokenizer.model_max_length
+
+        model.config.tune_mm_mlp_adapter = True
+        model.requires_grad_(False)
+        for p in model.get_model().mm_projector.parameters():
+            p.requires_grad = True
+
+        model.config.mm_use_im_start_end = data_args.mm_use_im_start_end = model_args.mm_use_im_start_end
+        model.config.mm_projector_lr = training_args.mm_projector_lr
+        training_args.use_im_start_end = model_args.mm_use_im_start_end
+        model.config.mm_use_im_patch_token = model_args.mm_use_im_patch_token
+        model.initialize_vision_tokenizer(model_args, tokenizer=tokenizer)
+
         from llava.mm_utils import tokenizer_image_token
         from llava.constants import IGNORE_INDEX
 
-        torch.autograd.set_detect_anomaly(True)  # type: ignore
+        # torch.autograd.set_detect_anomaly(True)  # type: ignore
         self.ignore_value = IGNORE_INDEX
-        self.tokenizer, model, vis_processor, _ = load_pretrained_model(
-            args.llava_ckpt_load_path,
-            model_name="llava-v1.5-7b",
-            device_map={"": device},  # type: ignore
-            device=device,
-            torch_dtype=args.train_dtype if train else torch.float16,
-        )
+        self.tokenizer = tokenizer
+        vis_processor = model.get_model().get_vision_tower().image_processor  # type: ignore
+        # self.tokenizer, model, vis_processor, _ = load_pretrained_model(
+        #     args.llava_ckpt_load_path,
+        #     model_name="llava-v1.5-7b",
+        #     device_map={"": device},  # type: ignore
+        #     device=device,
+        #     torch_dtype=args.train_dtype if train else torch.float16,
+        # )
         self.tokenize_image = partial(tokenizer_image_token, tokenizer=self.tokenizer, return_tensors="pt")
         load_ckpt(model, ckpt, device)
         model.train(train)
+
         freeze_modules: list[torch.nn.Module] = [
-            model.model.vision_tower,
+            model.model.vision_tower,  # type: ignore
             model.model.embed_tokens,
             model.model.norm,
             model.model.layers,
@@ -137,15 +233,15 @@ class LlavaModel:
                 param.requires_grad = False
 
         ### This is for debugging only
-        def print_grad_hook(self, grad_input, grad_output, name=""):
-            print("Inside " + name + " backward")
-            print("grad_input: ", grad_input)
-            print("grad_output: ", grad_output)
+        # def print_grad_hook(self, grad_input, grad_output, name=""):
+        #     print("Inside " + name + " backward")
+        #     print("grad_input: ", grad_input)
+        #     print("grad_output: ", grad_output)
 
-        model.lm_head.register_backward_hook(partial(print_grad_hook, name="lm_head"))
-        model.model.norm.register_backward_hook(partial(print_grad_hook, name="norm"))
-        model.model.layers.register_backward_hook(partial(print_grad_hook, name="layers"))
-        model.model.mm_projector.register_backward_hook(partial(print_grad_hook, name="projector"))
+        # model.lm_head.register_backward_hook(partial(print_grad_hook, name="lm_head"))
+        # model.model.norm.register_backward_hook(partial(print_grad_hook, name="norm"))
+        # model.model.layers.register_backward_hook(partial(print_grad_hook, name="layers"))
+        # model.model.mm_projector.register_backward_hook(partial(print_grad_hook, name="projector"))
         ### end debugging
         return model, lambda x: vis_processor.preprocess(x, return_tensors="pt")["pixel_values"][0]
 
@@ -178,22 +274,36 @@ class LlavaModel:
             "score": torch.tensor([x["score"] for x in batch]),
         }
 
-    @staticmethod
-    def forward(model, samples, _):
-        labels = samples["labels"]
-        masks = samples["attention_mask"]
-        logits = model(
-            images=samples["image"],
-            input_ids=samples["input_ids"],
-            attention_mask=masks,
+    def forward(self, model, samples, _):
+        ##################
+        # samples["images"] = samples["image"]
+        # del samples["score"], samples["image"]
+        # return model(**samples, return_dict=True)["loss"]
+        (
+            input_ids,
+            position_ids,
+            attention_mask,
+            past_key_values,
+            inputs_embeds,
+            labels,
+        ) = model.prepare_inputs_labels_for_multimodal(
+            samples["input_ids"], None, samples["attention_mask"], None, samples["labels"], samples["image"]
+        )
+        del samples["input_ids"], samples["attention_mask"], samples["labels"], samples["image"]
+        logits: torch.Tensor = model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
             return_dict=True,
         )["logits"]
         bs = labels.shape[0]
+
         # The below code is modified from transformers.models.llama.modeling_llama.LlamaForCasualLM.forward
         # Shift so that tokens < n predict n
         shift_logits = logits[..., :-1, :].contiguous()
         shift_labels = labels[..., 1:].contiguous()
-        shift_masks = masks[..., 1:].contiguous()
         # Flatten the tokens
         loss_fct = CrossEntropyLoss(reduction="none")
         shift_logits = shift_logits.view(-1, model.config.vocab_size)
@@ -201,9 +311,11 @@ class LlavaModel:
         # Enable model parallelism
         shift_labels = shift_labels.to(shift_logits.device)
         loss = loss_fct(shift_logits, shift_labels).view(bs, -1)  # [bs, seq_len]
+
         # bypass the input and padding token
         # since minigpt and blip take str as inputs, we only need this here
-        loss = torch.sum(loss * shift_masks.float(), dim=1) / torch.clamp(shift_masks.float().sum(dim=1), min=1e-9)
+        masks = shift_labels.ne(self.ignore_value).to(torch.float).view(bs, -1)
+        loss = torch.sum(loss * masks, dim=1) / torch.clamp(masks.sum(dim=1), min=1e-6)
         return loss
 
     def generate(self, model, texts, images):

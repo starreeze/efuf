@@ -16,9 +16,9 @@ from torch.utils.data import DataLoader, Dataset, random_split
 
 
 class GoldData(Dataset):
-    def __init__(self, vis_processor, model="minigpt"):
+    def __init__(self, vis_processor):
         super(GoldData, self).__init__()
-        self.model_prompt = getattr(args, f"{model}_train_prompt")
+        self.model_prompt = getattr(args, f"{args.model}_train_prompt")
         self.vis_processor = vis_processor
         with open(os.path.join(args.annotation_path, "captions_train2014.json"), "r") as f:
             self.data = json.load(f)["annotations"]
@@ -38,11 +38,10 @@ class GoldData(Dataset):
 
 
 class PosNegData(Dataset):
-    def __init__(self, vis_processor, score_filter=0, model="minigpt"):
+    def __init__(self, vis_processor, score_filter):
         "score_filter: <0 negative, >0 positive, =0 all"
         super(PosNegData, self).__init__()
-        self.model = model
-        self.model_prompt = getattr(args, f"{model}_train_prompt")
+        self.model_prompt = getattr(args, f"{args.model}_train_prompt")
         self.vis_processor = vis_processor
         print("constructing dataset ...")
         with open(args.pos_neg_data_path, "r") as f:
@@ -76,10 +75,9 @@ class PosNegData(Dataset):
 
 
 class SentenceData(Dataset):
-    def __init__(self, vis_processor, model="minigpt"):
+    def __init__(self, vis_processor):
         super(SentenceData, self).__init__()
-        self.model = model
-        self.model_prompt = getattr(args, f"{model}_train_prompt")
+        self.model_prompt = getattr(args, f"{args.model}_train_prompt")
         self.vis_processor = vis_processor
         print("constructing dataset ...")
         with open(args.sentence_data_path, "r") as f:
