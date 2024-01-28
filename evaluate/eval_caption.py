@@ -11,7 +11,7 @@ from io import TextIOWrapper
 from PIL import Image
 from tqdm import tqdm
 from torch.utils.data import DataLoader, Dataset
-from common.models import load_minigpt, load_blip, load_llava, generators
+from common.models import model_loaders, generators
 from common.args import args
 
 
@@ -51,16 +51,9 @@ def process_single(batch, model, prompt: str, output_fd: TextIOWrapper):
 
 
 def main():
-    if args.model == "minigpt":
-        model, vis_processor = load_minigpt(
-            args.minigpt_ckpt_load_path, args.device, model_args=["--cfg-path", args.minigpt_train_cfg]
-        )
-    elif args.model == "blip":
-        model, vis_processor = load_blip(args.blip_ckpt_load_path, args.device)
-    elif args.model == "llava":
-        model, vis_processor = load_llava(args.llava_ckpt_load_path, args.device)
-    else:
-        raise ValueError("Invalid model.")
+    model_load_path = getattr(args, f"{args.model}_ckpt_load_path")
+    model_args = ["--cfg-path", args.minigpt_train_cfg] if args.model == "minigpt" else []
+    model, vis_processor = model_loaders[args.model](model_load_path, args.device, False, model_args)
     with open(args.object_data_path, "r") as f:
         objects = f.read().splitlines()
     images_used = {obj.split(args.column_splitter)[0] for obj in objects}
@@ -74,11 +67,6 @@ def main():
     )
 
     prompt = getattr(args, f"{args.model}_eval_prompt")
-    # ckpt_name = os.path.basename(args.minigpt_ckpt_save_path)
-    # if ckpt_name.endswith(".pth") and ckpt_name != "step_000000.pth":
-    #     prompt = args.minigpt_eval_caption_prompt
-    # else:
-    #     prompt = args.minigpt_train_prompt
     with open(args.caption_eval_path, "w" if args.restart else "a", encoding="utf-8") as f:
         for batch in tqdm(dataloader):
             process_single(batch, model, prompt, output_fd=f)

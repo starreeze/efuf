@@ -14,7 +14,8 @@ from typing import Optional
 
 def load_ckpt(model, ckpt, device="cuda"):
     "load the trainable part from ckpt"
-    if ckpt == getattr(args, f"{args.model}_ckpt_load_path"):
+    original_path_name = "llava_path" if args.model == "llava" else f"{args.model}_ckpt_load_path"
+    if ckpt == getattr(args, original_path_name):
         print(f"Already loaded the original version from {ckpt}")
         return
     latest = ckpt if os.path.isfile(ckpt) else os.path.join(ckpt, sorted(os.listdir(ckpt))[-1])
@@ -113,15 +114,13 @@ class LlavaModel:
     # Below is modified from
     @dataclass
     class ModelArguments:
-        model_name_or_path: Optional[str] = field(default=args.llava_ckpt_load_path)
+        model_name_or_path: Optional[str] = field(default=args.llava_path)
         version: Optional[str] = field(default="v1")
         freeze_backbone: bool = field(default=True)
         tune_mm_mlp_adapter: bool = field(default=True)
         vision_tower: Optional[str] = field(default="openai/clip-vit-large-patch14-336")
         mm_vision_select_layer: Optional[int] = field(default=-2)  # default to the last layer
-        pretrain_mm_mlp_adapter: Optional[str] = field(
-            default=os.path.join(args.llava_ckpt_load_path, "mm_projector.bin")
-        )
+        pretrain_mm_mlp_adapter: Optional[str] = field(default=os.path.join(args.llava_path, "mm_projector.bin"))
         mm_projector_type: Optional[str] = field(default="mlp2x_gelu")
         mm_use_im_start_end: bool = field(default=False)
         mm_use_im_patch_token: bool = field(default=False)
@@ -159,8 +158,10 @@ class LlavaModel:
         mm_projector_lr: Optional[float] = None
         group_by_modality_length: bool = field(default=True)
 
-    def load(self, ckpt, device="cuda", train=False):
+    def load(self, ckpt, device="cuda", train=False, llava_args=[]):
         from llava.model.language_model.llava_llama import LlavaLlamaForCausalLM
+        from llava.mm_utils import tokenizer_image_token
+        from llava.constants import IGNORE_INDEX
 
         parser = transformers.HfArgumentParser((self.ModelArguments, self.DataArguments, self.TrainingArguments))  # type: ignore
         model_args, data_args, training_args = parser.parse_args_into_dataclasses(
@@ -168,14 +169,15 @@ class LlavaModel:
         )
 
         cache_dir = "/tmp"
+        dtype = args.train_dtype if train else torch.float16
         model: LlavaLlamaForCausalLM = LlavaLlamaForCausalLM.from_pretrained(
-            args.llava_ckpt_load_path, cache_dir=cache_dir, device_map={"": device}, torch_dtype=args.train_dtype
+            args.llava_path, cache_dir=cache_dir, device_map={"": device}, torch_dtype=dtype
         )  # type: ignore
         model.config.use_cache = False
         model.model.requires_grad_(False)
 
         tokenizer = transformers.AutoTokenizer.from_pretrained(
-            args.llava_ckpt_load_path,
+            args.llava_path,
             cache_dir=cache_dir,
             model_max_length=training_args.model_max_length,
             padding_side="right",
@@ -186,7 +188,7 @@ class LlavaModel:
         model.get_model().initialize_vision_modules(model_args=model_args, fsdp=training_args.fsdp)
 
         vision_tower = model.get_vision_tower()
-        vision_tower.to(dtype=args.train_dtype, device=device)
+        vision_tower.to(dtype=dtype, device=device)
 
         model.config.image_aspect_ratio = data_args.image_aspect_ratio
         model.config.tokenizer_padding_side = tokenizer.padding_side
@@ -203,20 +205,10 @@ class LlavaModel:
         model.config.mm_use_im_patch_token = model_args.mm_use_im_patch_token
         model.initialize_vision_tokenizer(model_args, tokenizer=tokenizer)
 
-        from llava.mm_utils import tokenizer_image_token
-        from llava.constants import IGNORE_INDEX
-
         # torch.autograd.set_detect_anomaly(True)  # type: ignore
         self.ignore_value = IGNORE_INDEX
         self.tokenizer = tokenizer
         vis_processor = model.get_model().get_vision_tower().image_processor  # type: ignore
-        # self.tokenizer, model, vis_processor, _ = load_pretrained_model(
-        #     args.llava_ckpt_load_path,
-        #     model_name="llava-v1.5-7b",
-        #     device_map={"": device},  # type: ignore
-        #     device=device,
-        #     torch_dtype=args.train_dtype if train else torch.float16,
-        # )
         self.tokenize_image = partial(tokenizer_image_token, tokenizer=self.tokenizer, return_tensors="pt")
         load_ckpt(model, ckpt, device)
         model.train(train)

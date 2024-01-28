@@ -2,7 +2,7 @@
 # @Date    : 2023-10-26 19:51:58
 # @Author  : Shangyu.Xing (starreeze@foxmail.com)
 
-import argparse
+import argparse, torch
 
 parser = argparse.ArgumentParser()
 # data
@@ -75,8 +75,8 @@ parser.add_argument(
 parser.add_argument("--gold_clip_score", type=float, default=40, help="clip score of the gold caption")
 
 parser.add_argument("--neg_w_start", type=float, default=0.3)
-parser.add_argument("--neg_w_end", type=float, default=0.1)
-parser.add_argument("--neg_w_start_step_pos", type=float, default=0.5)
+parser.add_argument("--neg_w_end", type=float, default=0)
+parser.add_argument("--neg_w_start_step_pos", type=float, default=0.2)
 parser.add_argument("--neg_w_sched_type", type=str, default="linear")
 parser.add_argument("--pos_w_start", type=float, default=1)
 parser.add_argument("--pos_w_end", type=float, default=0.5)
@@ -99,23 +99,24 @@ parser.add_argument("--infer_bs_multiply", type=int, default=2)
 parser.add_argument(
     "--train_bs_pos",
     type=int,
-    default=3,
+    default=1,
     help="number of positive samples (normal objects predicted by clip) in a batch",
 )
 parser.add_argument(
     "--train_bs_gold",
     type=int,
-    default=3,
+    default=1,
     help="number of positive samples (gold caption of COCO) in a batch",
 )
 parser.add_argument(
     "--train_bs_sent",
     type=int,
-    default=3,
+    default=1,
     help="number of positive samples (generated complete sentence) in a batch",
 )
-parser.add_argument("--train_bs_neg", type=int, default=3, help="number of negative samples in a batch")
-parser.add_argument("--train_lr", type=float, default=2e-5)
+parser.add_argument("--train_bs_neg", type=int, default=1, help="number of negative samples in a batch")
+parser.add_argument("--infer_bs_total", type=int, default=0, help="overwrite infer multiply for generatrion")
+parser.add_argument("--train_lr", type=float, default=1e-5)
 parser.add_argument("--train_wd", type=float, default=0.05)
 parser.add_argument("--train_epoch", type=int, default=1)
 parser.add_argument("--train_dataloader_worker", type=int, default=0)
@@ -175,6 +176,11 @@ parser.add_argument(
     type=str,
     default="/root/.cache/huggingface/hub/models--liuhaotian--llava-v1.5-7b/snapshots/12e054b30e8e061f423c7264bc97d4248232e965",
 )
+parser.add_argument(
+    "--llava_path",
+    type=str,
+    default="/root/.cache/huggingface/hub/models--liuhaotian--llava-v1.5-7b/snapshots/12e054b30e8e061f423c7264bc97d4248232e965",
+)
 parser.add_argument("--llava_ckpt_save_path", type=str, default="checkpoints/llava_vicuna_7b")
 
 # eval
@@ -198,9 +204,12 @@ args.infer_bs_pos = args.train_bs_pos * args.infer_bs_multiply
 args.infer_bs_sent = args.train_bs_sent * args.infer_bs_multiply
 args.infer_bs_eng = args.train_bs_neg * args.infer_bs_multiply
 args.infer_bs_gold = args.train_bs_gold * args.infer_bs_multiply
-args.infer_bs_total = args.infer_bs_pos + args.infer_bs_sent + args.infer_bs_eng + args.infer_bs_gold
+if args.infer_bs_total == 0:
+    args.infer_bs_total = args.infer_bs_pos + args.infer_bs_sent + args.infer_bs_eng + args.infer_bs_gold
+
 if not args.no_print_args:
     print(args)
+args.train_dtype = getattr(torch, args.train_dtype_str)
 
 
 # model provided parser

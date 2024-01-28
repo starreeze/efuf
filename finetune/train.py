@@ -129,7 +129,6 @@ def main():
     wandb.init(project="lmm_hal", entity=args.wandb_user, name=args.model, config=vars(args), sync_tensorboard=False)
     print("W&B initialized.")
 
-    args.train_dtype = getattr(torch, args.train_dtype_str)
     model_load_path = getattr(args, f"{args.model}_ckpt_load_path")
     model_args = ["--cfg-path", args.minigpt_train_cfg] if args.model == "minigpt" else []
     model, vis_processor = model_loaders[args.model](model_load_path, args.device, True, model_args)

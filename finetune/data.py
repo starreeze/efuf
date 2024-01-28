@@ -107,13 +107,7 @@ def load_datasets(vis_processor, train_bs, valid_bs, type, continuous=False):
         raise ValueError("Unknown dataset type")
     valid_size = int(args.valid_data_split * len(dataset))
     train, valid = random_split(dataset, [len(dataset) - valid_size, valid_size])
-    if continuous:
-        train_loader = ContinuousDataLoader(
-            train, train_bs, shuffle=True, drop_last=True, collate_fn=sample_collators[args.model]
-        )
-    else:
-        train_loader = DataLoader(
-            train, train_bs, shuffle=True, drop_last=True, collate_fn=sample_collators[args.model]
-        )
-    valid_loader = DataLoader(valid, valid_bs, shuffle=False, drop_last=True, collate_fn=sample_collators[args.model])
+    loader_cls = ContinuousDataLoader if continuous else DataLoader
+    train_loader = loader_cls(train, train_bs, shuffle=True, drop_last=True, collate_fn=sample_collators[args.model])
+    valid_loader = loader_cls(valid, valid_bs, shuffle=False, drop_last=True, collate_fn=sample_collators[args.model])
     return train_loader, valid_loader
