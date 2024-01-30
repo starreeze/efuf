@@ -1,5 +1,5 @@
 #!/bin/bash
-docker run --gpus all -it \
+docker run --gpus all --network=host -it \
     -v .:/workspace/hal \
     -v /data/cache/huggingface:/root/.cache/huggingface \
     -v /data/cache/torch:/root/.cache/torch \

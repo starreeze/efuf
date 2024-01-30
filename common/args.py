@@ -74,9 +74,9 @@ parser.add_argument(
 )  # 27k
 parser.add_argument("--gold_clip_score", type=float, default=40, help="clip score of the gold caption")
 
-parser.add_argument("--neg_w_start", type=float, default=0.3)
+parser.add_argument("--neg_w_start", type=float, default=0.4)
 parser.add_argument("--neg_w_end", type=float, default=0)
-parser.add_argument("--neg_w_start_step_pos", type=float, default=0.2)
+parser.add_argument("--neg_w_start_step_pos", type=float, default=0.4)
 parser.add_argument("--neg_w_sched_type", type=str, default="linear")
 parser.add_argument("--pos_w_start", type=float, default=1)
 parser.add_argument("--pos_w_end", type=float, default=0.5)
@@ -181,7 +181,38 @@ parser.add_argument(
     type=str,
     default="/root/.cache/huggingface/hub/models--liuhaotian--llava-v1.5-7b/snapshots/12e054b30e8e061f423c7264bc97d4248232e965",
 )
+parser.add_argument(
+    "--llava_vit_path",
+    type=str,
+    default="/root/.cache/huggingface/hub/models--openai--clip-vit-large-patch14-336/snapshots/ce19dc912ca5cd21c8a653c79e251e808ccabcd1",
+)
 parser.add_argument("--llava_ckpt_save_path", type=str, default="checkpoints/llava_vicuna_7b")
+
+### share4v
+parser.add_argument(
+    "--share4v_train_prompt", type=str, default="### human: <image>\n Please describe the image. \n### gpt:"
+)
+parser.add_argument(
+    "--share4v_eval_prompt",
+    type=str,
+    default="### human: <image>\n Please describe the image in great detail. Your response should have at least 100 words. \n### gpt:",
+)
+parser.add_argument(
+    "--share4v_ckpt_load_path",
+    type=str,
+    default="/root/.cache/huggingface/hub/models--Lin-Chen--ShareGPT4V-7B/snapshots/a973da7d8dba5e9ac2817f1c88bf9c8f36004078",
+)
+parser.add_argument(
+    "--share4v_path",
+    type=str,
+    default="/root/.cache/huggingface/hub/models--Lin-Chen--ShareGPT4V-7B/snapshots/a973da7d8dba5e9ac2817f1c88bf9c8f36004078",
+)
+parser.add_argument(
+    "--share4v_vit_path",
+    type=str,
+    default="/root/.cache/huggingface/hub/models--Lin-Chen--ShareGPT4V-7B_Pretrained_vit-large336-l12/snapshots/55da275fb4755cc5e5d9c6121aa72adc6de01f55",
+)
+parser.add_argument("--share4v_ckpt_save_path", type=str, default="checkpoints/share4v_7b")
 
 # eval
 parser.add_argument("--pope_result_path", type=str, default="evaluate/pope/result")
@@ -195,7 +226,6 @@ parser.add_argument("--start_pos", type=int, default=0)
 parser.add_argument("--end_pos", type=int, default=int(1e10))
 parser.add_argument("--proxy", type=str, default="")
 parser.add_argument("--train_dtype_str", type=str, default="bfloat16")
-parser.add_argument("--no_print_args", action="store_true")
 parser.add_argument("--dry_run", action="store_true")
 parser.add_argument("--no_first_eval", action="store_true")
 
@@ -207,8 +237,6 @@ args.infer_bs_gold = args.train_bs_gold * args.infer_bs_multiply
 if args.infer_bs_total == 0:
     args.infer_bs_total = args.infer_bs_pos + args.infer_bs_sent + args.infer_bs_eng + args.infer_bs_gold
 
-if not args.no_print_args:
-    print(args)
 args.train_dtype = getattr(torch, args.train_dtype_str)
 
 

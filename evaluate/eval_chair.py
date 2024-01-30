@@ -134,7 +134,7 @@ class CHAIR(object):
         num_hal_sent = 0
         num_caption_words = 0
         num_caption_chars = 0
-        for image_id, caption in zip(image_ids, captions):
+        for image_id, caption in tqdm(zip(image_ids, captions)):
             num_caption_words += len(caption.split())
             num_caption_chars += len(caption)
             obj_set = set()
@@ -158,7 +158,7 @@ def main():
     image_ids, captions = [], []
     for line in content:
         try:
-            image_name, caption = line.split(args.column_splitter)
+            image_name, caption = line.replace("### gpt: ", "").split("###")[:2]
         except ValueError as e:
             print(f"Skipping line {line} due to {e}")
             continue

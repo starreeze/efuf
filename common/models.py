@@ -111,16 +111,20 @@ def merge_batch_collator(*inputs: dict):
 
 class LlavaModel:
     # No modification made to llava 1.5
-    # Below is modified from
+    # shareGPT4V.forward is modified according to llava 1.5's version, to enable label output
+    # Below is modified from the llava train script. ShareGPT4V adopts the same model.
     @dataclass
     class ModelArguments:
-        model_name_or_path: Optional[str] = field(default=args.llava_path)
+        model_name_or_path: Optional[str] = field(default=getattr(args, f"{args.model}_path"))
         version: Optional[str] = field(default="v1")
         freeze_backbone: bool = field(default=True)
         tune_mm_mlp_adapter: bool = field(default=True)
-        vision_tower: Optional[str] = field(default="openai/clip-vit-large-patch14-336")
+        vision_tower: Optional[str] = field(default=getattr(args, f"{args.model}_vit_path"))
         mm_vision_select_layer: Optional[int] = field(default=-2)  # default to the last layer
-        pretrain_mm_mlp_adapter: Optional[str] = field(default=os.path.join(args.llava_path, "mm_projector.bin"))
+        # TODO what about the projector in share4v?
+        pretrain_mm_mlp_adapter: Optional[str] = (
+            field(default=os.path.join(args.llava_path, "mm_projector.bin")) if args.model == "llava" else None
+        )
         mm_projector_type: Optional[str] = field(default="mlp2x_gelu")
         mm_use_im_start_end: bool = field(default=False)
         mm_use_im_patch_token: bool = field(default=False)
@@ -159,26 +163,31 @@ class LlavaModel:
         group_by_modality_length: bool = field(default=True)
 
     def load(self, ckpt, device="cuda", train=False, llava_args=[]):
-        from llava.model.language_model.llava_llama import LlavaLlamaForCausalLM
-        from llava.mm_utils import tokenizer_image_token
-        from llava.constants import IGNORE_INDEX
+        if args.model == "llava":
+            from llava.model.language_model.llava_llama import LlavaLlamaForCausalLM as VLM
+            from llava.mm_utils import tokenizer_image_token
+            from llava.constants import IGNORE_INDEX
+        elif args.model == "share4v":
+            from share4v.model.language_model.share4v_llama import Share4VLlamaForCausalLM as VLM
+            from share4v.mm_utils import tokenizer_image_token
+            from share4v.constants import IGNORE_INDEX
+        else:
+            raise NotImplementedError()
 
         parser = transformers.HfArgumentParser((self.ModelArguments, self.DataArguments, self.TrainingArguments))  # type: ignore
         model_args, data_args, training_args = parser.parse_args_into_dataclasses(
-            ["--output_dir", args.llava_ckpt_save_path]
+            ["--output_dir", getattr(args, f"{args.model}_ckpt_save_path")]
         )
 
-        cache_dir = "/tmp"
         dtype = args.train_dtype if train else torch.float16
-        model: LlavaLlamaForCausalLM = LlavaLlamaForCausalLM.from_pretrained(
-            args.llava_path, cache_dir=cache_dir, device_map={"": device}, torch_dtype=dtype
+        model: VLM = VLM.from_pretrained(
+            args.llava_path, local_files_only=True, device_map={"": device}, torch_dtype=dtype
         )  # type: ignore
         model.config.use_cache = False
         model.model.requires_grad_(False)
 
         tokenizer = transformers.AutoTokenizer.from_pretrained(
-            args.llava_path,
-            cache_dir=cache_dir,
+            getattr(args, f"{args.model}_path"),
             model_max_length=training_args.model_max_length,
             padding_side="right",
             use_fast=False,
@@ -205,7 +214,6 @@ class LlavaModel:
         model.config.mm_use_im_patch_token = model_args.mm_use_im_patch_token
         model.initialize_vision_tokenizer(model_args, tokenizer=tokenizer)
 
-        # torch.autograd.set_detect_anomaly(True)  # type: ignore
         self.ignore_value = IGNORE_INDEX
         self.tokenizer = tokenizer
         vis_processor = model.get_model().get_vision_tower().image_processor  # type: ignore
@@ -224,17 +232,6 @@ class LlavaModel:
             for param in module.parameters():
                 param.requires_grad = False
 
-        ### This is for debugging only
-        # def print_grad_hook(self, grad_input, grad_output, name=""):
-        #     print("Inside " + name + " backward")
-        #     print("grad_input: ", grad_input)
-        #     print("grad_output: ", grad_output)
-
-        # model.lm_head.register_backward_hook(partial(print_grad_hook, name="lm_head"))
-        # model.model.norm.register_backward_hook(partial(print_grad_hook, name="norm"))
-        # model.model.layers.register_backward_hook(partial(print_grad_hook, name="layers"))
-        # model.model.mm_projector.register_backward_hook(partial(print_grad_hook, name="projector"))
-        ### end debugging
         return model, lambda x: vis_processor.preprocess(x, return_tensors="pt")["pixel_values"][0]
 
     def data_map(self, inputs: dict, add_end_sym=True) -> dict:
@@ -267,25 +264,19 @@ class LlavaModel:
         }
 
     def forward(self, model, samples, _):
-        ##################
-        # samples["images"] = samples["image"]
-        # del samples["score"], samples["image"]
-        # return model(**samples, return_dict=True)["loss"]
-        (
-            input_ids,
-            position_ids,
-            attention_mask,
-            past_key_values,
-            inputs_embeds,
-            labels,
-        ) = model.prepare_inputs_labels_for_multimodal(
-            samples["input_ids"], None, samples["attention_mask"], None, samples["labels"], samples["image"]
-        )
+        embed_image = model.prepare_inputs_labels_for_multimodal
+        if args.model == "llava":
+            input_ids, _, attention_mask, past_key_values, inputs_embeds, labels = embed_image(
+                samples["input_ids"], None, samples["attention_mask"], None, samples["labels"], samples["image"]
+            )
+        else:  # no position_ids for share4v
+            input_ids, attention_mask, past_key_values, inputs_embeds, labels = embed_image(
+                samples["input_ids"], samples["attention_mask"], None, samples["labels"], samples["image"]
+            )
         del samples["input_ids"], samples["attention_mask"], samples["labels"], samples["image"]
         logits: torch.Tensor = model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             return_dict=True,
@@ -324,9 +315,10 @@ class LlavaModel:
                 num_beams=5,
                 # no_repeat_ngram_size=3,
                 max_new_tokens=args.max_new_tokens,
-                length_penalty=2,
             )
-        return self.tokenizer.batch_decode(output_ids[:, input_ids.shape[1] :], skip_special_tokens=True)
+        texts = self.tokenizer.batch_decode(output_ids[:, input_ids.shape[1] :], skip_special_tokens=True)
+        # as the prompt is in the format of ### human/gpt, we need to truncate the generation to the next ###
+        return [text.replace("### gpt: ", "").split("###")[0] for text in texts]
 
     def pad_batch_collator(self, *inputs: dict):
         "a higher level collator that collate multiple batches into one, by padding the ids/masks and merging other data"
@@ -348,31 +340,37 @@ model_loaders = {
     "minigpt": load_minigpt,
     "blip": load_blip,
     "llava": llava_model.load,
+    "share4v": llava_model.load,
 }
 data_maps = {
     "minigpt": minigpt_data_map,
     "blip": blip_data_map,
     "llava": llava_model.data_map,
+    "share4v": llava_model.data_map,
 }
 sample_collators = {
     "minigpt": None,
     "blip": None,
     "llava": llava_model.collator,
+    "share4v": llava_model.collator,
 }
 batch_collators = {
     "minigpt": merge_batch_collator,
     "blip": merge_batch_collator,
     "llava": llava_model.pad_batch_collator,
+    "share4v": llava_model.pad_batch_collator,
 }
 generators = {
     "minigpt": minigpt_generate,
     "blip": blip_generate,
     "llava": llava_model.generate,
+    "share4v": llava_model.generate,
 }
 model_forward = {
     "minigpt": lambda model, samples, add_end_sym: model(samples, add_end_sym=add_end_sym, reduction="none")["loss"],
     "blip": lambda model, samples, add_end_sym: model(samples, add_end_sym=add_end_sym, reduction="none")["loss"],
     "llava": llava_model.forward,
+    "share4v": llava_model.forward,
 }
 
 
