@@ -46,8 +46,8 @@ def main():
 
     distinct1, distinct2 = distinct(captions)
     print(
-        f"distinct-1: {dist1}"
-        f"\ndistinct-2: {dist2}"
+        f"distinct-1: {distinct1}"
+        f"\ndistinct-2: {distinct2}"
     )
 
 

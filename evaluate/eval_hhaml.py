@@ -26,27 +26,21 @@ an associated image with scale 1-100
 ### Captions
 {}
 '''
+def anychat_gpt_4(messages: list):
+    completion = openai.ChatCompletion.create(model="gpt-4", messages=messages)
+    return completion.choices[0].message.content
 
-class Chat:
-    def __init__(self, model="", timeout_sec=20, openai_apikey=''):
-        self.model = model
-        self.timeout = timeout_sec
-        openai.api_key = openai_apikey
-
-    def chat_completion(self, messages, temperature=0.2, top_p=1, max_tokens=512,
-                        presence_penalty=0, frequency_penalty=0):
-
-        response = openai.ChatCompletion.create(
-            model=self.model,
-            messages=messages,
-            temperature=temperature,
-            top_p=top_p,
-            max_tokens=max_tokens,
-            presence_penalty=presence_penalty,
-            frequency_penalty=frequency_penalty
-        )
-
+def g4f_gpt_4(messages: list, stream=True):
+    response = g4f.ChatCompletion.create(
+        model=g4f.models.gpt_4, provider=g4f.Provider.Bing, messages=messages, stream=stream, proxy=proxy
+    )
+    if stream:
+        for message in response:
+            print(message, flush=True, end="")
+        print()
+    else:
         return response
+
         
 if __name__ == '__main__':
     with open(args.caption_eval_path, "r") as f:
@@ -72,17 +66,15 @@ if __name__ == '__main__':
                 image_url.append(image["coco_url"])
                 break
 
-    chat = Chat(model=args.gpt_model, timeout_sec=100, openai_apikey=openai.api_key)
 
     # ask GPT-4 to evaluate
     scores = []
     for i in range(len(image_ids)):
         input_text = template.format(image_url[i], captions[i])
-        response = chat.chat_completion(
+        response = anychat_gpt_4(
                     messages=[
                         {"role": "user", "content": input_text}
                     ],
-                    temperature=0.0,
                 )
         print(f'Response: {response}')
         scores.append(response)        
