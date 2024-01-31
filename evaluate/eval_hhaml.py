@@ -79,7 +79,6 @@ if __name__ == '__main__':
         print(f'Response: {response}')
         scores.append(response)        
 
-    # # assuming order of 96 questions is not changed
     print('Average score: {:.2f}'.format(sum(scores) / len(scores)))
 
     
