@@ -1,18 +1,53 @@
 # -*- coding: utf-8 -*-
 # @Date    : 2024-01-10 11:15:40
-# @Author  : Shangyu.Xing (starreeze@foxmail.com)
-# @Note    : some part of the code is from
+# @Author  : Shangyu.Xing (starreeze@foxmail.com); Weihao.Chen
+# @Note    : some part of the code is from RLHF-V
 
 from __future__ import annotations
 import sys, os, nltk, json
 from typing import Iterable
+import numpy as np
 from tqdm import tqdm
+from collections import Counter
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 from common.args import args
 from common.utils import merge_dict_set
-from evaluate.eval_utils import get_eval_caption
+from nltk.translate import bleu_score
+from nltk.translate.bleu_score import SmoothingFunction
+
+
+def bleu(hyps, refs):
+    #  Calculate bleu_1 and bleu_2.
+    bleu_1 = []
+    bleu_2 = []
+    for hyp, ref in tqdm(zip(hyps, refs)):
+        score = bleu_score.sentence_bleu(
+            [ref], hyp, smoothing_function=SmoothingFunction().method7, weights=[1, 0, 0, 0]
+        )
+        bleu_1.append(score)
+        score = bleu_score.sentence_bleu(
+            [ref], hyp, smoothing_function=SmoothingFunction().method7, weights=[0.5, 0.5, 0, 0]
+        )
+        bleu_2.append(score)
+    bleu_1 = np.average(bleu_1)
+    bleu_2 = np.average(bleu_2)
+    return bleu_1, bleu_2
+
+
+def distinct(seqs):
+    # Calculate intra distinct-1 and distinct-2.
+    dist1, dist2 = [], []
+    for seq in seqs:
+        unigrams = Counter(seq)
+        bigrams = Counter(zip(seq, seq[1:]))
+        dist1.append(len(unigrams))
+        dist2.append(len(bigrams) / 2)
+
+    dist1 = np.average(dist1)
+    dist2 = np.average(dist2)
+    return dist1, dist2
 
 
 class CHAIR(object):
@@ -153,10 +188,40 @@ class CHAIR(object):
 
 
 def main():
-    image_ids, captions = get_eval_caption()
+    print("loading eval...")
+    with open(args.caption_eval_path, "r") as f:
+        content: list[str] = f.read().splitlines()
+    image_ids, captions = [], []
+    eval_end_pos = args.default_eval_samples if args.end_pos == int(1e10) else args.end_pos
+    for line in content[args.start_pos : eval_end_pos]:
+        try:
+            image_name, caption = line.replace("### gpt: ", "").split("###")[:2]
+        except ValueError as e:
+            print(f"Skipping line {line} due to {e}")
+            continue
+        image_ids.append(int(image_name.split("_")[-1].split(".")[0]))
+        captions.append(caption)
 
+    print("loading ground truth...")
+    with open(os.path.join(args.annotation_path, "captions_train2014.json"), "r") as f:
+        data = json.load(f)
+    ground_truth = []
+    for image_id in image_ids:
+        for image in data["annotations"]:
+            if image["image_id"] == image_id:
+                ground_truth.append(image["caption"])
+                break
+
+    print("computing chair...")
     chair = CHAIR(args.annotation_path, args.synonyms_path, image_ids)
     total_obj, hal_obj, hal_sent, n_word, n_char = chair.compute(image_ids, captions)
+
+    print("computing bleu... ")
+    bleu_1, bleu_2 = bleu(captions, ground_truth)
+
+    print("computing distinct... ")
+    distinct1, distinct2 = distinct(captions)
+
     print(
         f"Total objects: {total_obj}"
         f"\nHallucinated objects: {hal_obj}"
@@ -166,6 +231,10 @@ def main():
         f"\nCHAIRi: {hal_obj / total_obj}"
         f"\nAverage caption word len: {n_word / len(image_ids)}"
         f"\nAverage caption char len: {n_char / len(image_ids)}"
+        f"\nBleu_1 Score: {bleu_1}"
+        f"\nBleu_2 Score: {bleu_2}"
+        f"\nDistinct-1: {distinct1}"
+        f"\nDistinct-2: {distinct2}"
     )
 
 
