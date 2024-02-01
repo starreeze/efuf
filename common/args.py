@@ -74,7 +74,7 @@ parser.add_argument(
 )  # 27k
 parser.add_argument("--gold_clip_score", type=float, default=40, help="clip score of the gold caption")
 
-parser.add_argument("--neg_w_start", type=float, default=0.4)
+parser.add_argument("--neg_w_start", type=float, default=0.3)
 parser.add_argument("--neg_w_end", type=float, default=0)
 parser.add_argument("--neg_w_start_step_pos", type=float, default=0.4)
 parser.add_argument("--neg_w_sched_type", type=str, default="linear")
@@ -148,6 +148,7 @@ parser.add_argument(
     type=str,
     default="[INST] <Img><ImageHere></Img> According to the given image, answer yes or no to the question faithfully: {question} [/INST]",
 )
+parser.add_argument("--minigpt_path", type=str, default="checkpoints/minigpt4_llama2_7b/pretrained.pth")
 parser.add_argument("--minigpt_ckpt_load_path", type=str, default="checkpoints/minigpt4_llama2_7b/pretrained.pth")
 parser.add_argument("--minigpt_ckpt_save_path", type=str, default="checkpoints/minigpt4_llama2_7b")
 
@@ -159,6 +160,7 @@ parser.add_argument(
     default="Please describe the image in great detail. Your response should have at least 100 words.",
 )
 # note that this should be modified in the config file, along with vicuna path
+parser.add_argument("--blip_path", type=str, default="checkpoints/blip_vicuna_7b/pretrained.pth")
 parser.add_argument("--blip_ckpt_load_path", type=str, default="checkpoints/blip_vicuna_7b/pretrained.pth")
 parser.add_argument("--blip_ckpt_save_path", type=str, default="checkpoints/blip_vicuna_7b")
 
@@ -218,6 +220,7 @@ parser.add_argument("--share4v_ckpt_save_path", type=str, default="checkpoints/s
 parser.add_argument("--pope_result_path", type=str, default="evaluate/pope/result")
 parser.add_argument("--pope_max_new_tokens", type=int, default=20)
 parser.add_argument("--default_eval_samples", type=int, default=1600)
+parser.add_argument("--generate_length_penalty", type=float, default=-1)
 
 # common control
 parser.add_argument("--device", type=str, default="cuda:0")

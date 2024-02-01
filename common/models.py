@@ -14,10 +14,9 @@ from typing import Optional
 
 def load_ckpt(model, ckpt, device="cuda"):
     "load the trainable part from ckpt"
-    # original_path_name = "llava_path" if args.model == "llava" else f"{args.model}_ckpt_load_path"
-    # if ckpt == getattr(args, original_path_name):
-    #     print(f"Already loaded the original version from {ckpt}")
-    #     return
+    if ckpt == getattr(args, f"{args.model}_path"):
+        print(f"Already loaded the original version from {ckpt}")
+        return
     latest = ckpt if os.path.isfile(ckpt) else os.path.join(ckpt, sorted(os.listdir(ckpt))[-1])
     print(f"Loading from {latest}")
     checkpoint = torch.load(latest, map_location=device)
@@ -80,17 +79,20 @@ def blip_data_map(inputs: dict, add_end_sym=None) -> dict:
 
 
 def minigpt_generate(model, texts, images):
-    return model.generate(images, texts, max_new_tokens=args.max_new_tokens)
+    kwargs = {"length_penalty": args.generate_length_penalty} if args.length_penalty != -1 else {}
+    return model.generate(images, texts, max_new_tokens=args.max_new_tokens, **kwargs)
 
 
 def blip_generate(model, texts, images):
     results = []
+    kwargs = {"length_penalty": args.generate_length_penalty} if args.length_penalty != -1 else {}
     for text, image in zip(texts, images):
         res = model.generate(
             {"prompt": [text], "image": image.unsqueeze(0)},
             max_length=args.max_new_tokens,
             temperature=0.9,
             use_nucleus_sampling=True,
+            **kwargs,
         )
         results.extend(res)
     return results
@@ -306,6 +308,7 @@ class LlavaModel:
         # as the prompt are all the same, it can be copied from the first prompt
         # mind the padding if want to modify it into vqa
         input_ids = input_ids.unsqueeze(0).expand([len(texts), -1]).cuda()
+        kwargs = {"length_penalty": args.generate_length_penalty} if args.length_penalty != -1 else {}
         with torch.inference_mode():
             output_ids = model.generate(
                 input_ids,
@@ -315,6 +318,7 @@ class LlavaModel:
                 num_beams=5,
                 # no_repeat_ngram_size=3,
                 max_new_tokens=args.max_new_tokens,
+                **kwargs,
             )
         texts = self.tokenizer.batch_decode(output_ids[:, input_ids.shape[1] :], skip_special_tokens=True)
         # as the prompt is in the format of ### human/gpt, we need to truncate the generation to the next ###
