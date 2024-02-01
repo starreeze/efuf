@@ -58,7 +58,8 @@ def main():
         objects = f.read().splitlines()
     images_used = {obj.split(args.column_splitter)[0] for obj in objects}
     image_names = filter(lambda x: x not in images_used, sorted(os.listdir(args.image_dir_path)))
-    image_names = list(image_names)[args.start_pos : args.end_pos]
+    eval_end_pos = args.default_eval_samples if args.end_pos == int(1e10) else args.end_pos
+    image_names = list(image_names)[args.start_pos : eval_end_pos]
     dataloader = DataLoader(
         CocoImageDataset(image_names, vis_processor),
         args.infer_bs_total,

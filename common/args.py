@@ -217,6 +217,7 @@ parser.add_argument("--share4v_ckpt_save_path", type=str, default="checkpoints/s
 # eval
 parser.add_argument("--pope_result_path", type=str, default="evaluate/pope/result")
 parser.add_argument("--pope_max_new_tokens", type=int, default=20)
+parser.add_argument("--default_eval_samples", type=int, default=1600)
 
 # common control
 parser.add_argument("--device", type=str, default="cuda:0")

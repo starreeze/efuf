@@ -12,6 +12,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 from common.args import args
 from common.utils import merge_dict_set
+from evaluate.eval_utils import get_eval_caption
 
 
 class CHAIR(object):
@@ -152,18 +153,7 @@ class CHAIR(object):
 
 
 def main():
-    args.no_print_args = True
-    with open(args.caption_eval_path, "r") as f:
-        content: list[str] = f.read().splitlines()
-    image_ids, captions = [], []
-    for line in content:
-        try:
-            image_name, caption = line.replace("### gpt: ", "").split("###")[:2]
-        except ValueError as e:
-            print(f"Skipping line {line} due to {e}")
-            continue
-        image_ids.append(int(image_name.split("_")[-1].split(".")[0]))
-        captions.append(caption)
+    image_ids, captions = get_eval_caption()
 
     chair = CHAIR(args.annotation_path, args.synonyms_path, image_ids)
     total_obj, hal_obj, hal_sent, n_word, n_char = chair.compute(image_ids, captions)
