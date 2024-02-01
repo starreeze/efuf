@@ -8,14 +8,16 @@ import os, torch, transformers
 from functools import partial
 from torch.nn import CrossEntropyLoss
 from common.args import args
+from dataclasses import dataclass, field
+from typing import Optional
 
 
 def load_ckpt(model, ckpt, device="cuda"):
     "load the trainable part from ckpt"
-    original_path_name = "llava_path" if args.model == "llava" else f"{args.model}_ckpt_load_path"
-    if ckpt == getattr(args, original_path_name):
-        print(f"Already loaded the original version from {ckpt}")
-        return
+    # original_path_name = "llava_path" if args.model == "llava" else f"{args.model}_ckpt_load_path"
+    # if ckpt == getattr(args, original_path_name):
+    #     print(f"Already loaded the original version from {ckpt}")
+    #     return
     latest = ckpt if os.path.isfile(ckpt) else os.path.join(ckpt, sorted(os.listdir(ckpt))[-1])
     print(f"Loading from {latest}")
     checkpoint = torch.load(latest, map_location=device)
@@ -110,6 +112,55 @@ def merge_batch_collator(*inputs: dict):
 class LlavaModel:
     # No modification made to llava 1.5
     # shareGPT4V.forward is modified according to llava 1.5's version, to enable label output
+    # Below is modified from the llava train script. ShareGPT4V adopts the same model.
+
+    @dataclass
+    class ModelArguments:
+        model_name_or_path: Optional[str] = field(default=getattr(args, f"{args.model}_path", None))
+        version: Optional[str] = field(default="v1")
+        freeze_backbone: bool = field(default=True)
+        tune_mm_mlp_adapter: bool = field(default=True)
+        vision_tower: Optional[str] = field(default=getattr(args, f"{args.model}_vit_path", None))
+        mm_vision_select_layer: Optional[int] = field(default=-2)  # default to the last layer
+        pretrain_mm_mlp_adapter: Optional[str] = (
+            field(default=os.path.join(args.llava_path, "mm_projector.bin")) if args.model == "llava" else None
+        )
+        mm_projector_type: Optional[str] = field(default="mlp2x_gelu")
+        mm_use_im_start_end: bool = field(default=False)
+        mm_use_im_patch_token: bool = field(default=False)
+        mm_vision_select_feature: Optional[str] = field(default="patch")
+
+    @dataclass
+    class DataArguments:
+        lazy_preprocess: bool = True
+        is_multimodal: bool = True
+        image_aspect_ratio: str = "pad"
+
+    @dataclass
+    class TrainingArguments(transformers.TrainingArguments):
+        optim: str = field(default="adamw_torch")
+        remove_unused_columns: bool = field(default=False)
+        freeze_mm_mlp_adapter: bool = field(default=False)
+        mpt_attn_impl: Optional[str] = field(default="triton")
+        model_max_length: int = field(
+            default=4096,
+            metadata={"help": "Maximum sequence length. Sequences will be right padded (and possibly truncated)."},
+        )
+        double_quant: bool = field(
+            default=True, metadata={"help": "Compress the quantization statistics through double quantization."}
+        )
+        quant_type: str = field(
+            default="nf4", metadata={"help": "Quantization data type to use. Should be one of `fp4` or `nf4`."}
+        )
+        bits: int = field(default=16, metadata={"help": "How many bits to use."})
+        lora_enable: bool = False
+        lora_r: int = 64
+        lora_alpha: int = 16
+        lora_dropout: float = 0.05
+        lora_weight_path: str = ""
+        lora_bias: str = "none"
+        mm_projector_lr: Optional[float] = None
+        group_by_modality_length: bool = field(default=True)
 
     def load(self, ckpt, device="cuda", train=False, llava_args=[]):
         if args.model == "llava":
@@ -123,59 +174,7 @@ class LlavaModel:
         else:
             raise NotImplementedError()
 
-        # Below is modified from the llava train script. ShareGPT4V adopts the same model.
-        from dataclasses import dataclass, field
-        from typing import Optional
-
-        @dataclass
-        class ModelArguments:
-            model_name_or_path: Optional[str] = field(default=getattr(args, f"{args.model}_path"))
-            version: Optional[str] = field(default="v1")
-            freeze_backbone: bool = field(default=True)
-            tune_mm_mlp_adapter: bool = field(default=True)
-            vision_tower: Optional[str] = field(default=getattr(args, f"{args.model}_vit_path"))
-            mm_vision_select_layer: Optional[int] = field(default=-2)  # default to the last layer
-            pretrain_mm_mlp_adapter: Optional[str] = (
-                field(default=os.path.join(args.llava_path, "mm_projector.bin")) if args.model == "llava" else None
-            )
-            mm_projector_type: Optional[str] = field(default="mlp2x_gelu")
-            mm_use_im_start_end: bool = field(default=False)
-            mm_use_im_patch_token: bool = field(default=False)
-            mm_vision_select_feature: Optional[str] = field(default="patch")
-
-        @dataclass
-        class DataArguments:
-            lazy_preprocess: bool = True
-            is_multimodal: bool = True
-            image_aspect_ratio: str = "pad"
-
-        @dataclass
-        class TrainingArguments(transformers.TrainingArguments):
-            optim: str = field(default="adamw_torch")
-            remove_unused_columns: bool = field(default=False)
-            freeze_mm_mlp_adapter: bool = field(default=False)
-            mpt_attn_impl: Optional[str] = field(default="triton")
-            model_max_length: int = field(
-                default=4096,
-                metadata={"help": "Maximum sequence length. Sequences will be right padded (and possibly truncated)."},
-            )
-            double_quant: bool = field(
-                default=True, metadata={"help": "Compress the quantization statistics through double quantization."}
-            )
-            quant_type: str = field(
-                default="nf4", metadata={"help": "Quantization data type to use. Should be one of `fp4` or `nf4`."}
-            )
-            bits: int = field(default=16, metadata={"help": "How many bits to use."})
-            lora_enable: bool = False
-            lora_r: int = 64
-            lora_alpha: int = 16
-            lora_dropout: float = 0.05
-            lora_weight_path: str = ""
-            lora_bias: str = "none"
-            mm_projector_lr: Optional[float] = None
-            group_by_modality_length: bool = field(default=True)
-
-        parser = transformers.HfArgumentParser((ModelArguments, DataArguments, TrainingArguments))  # type: ignore
+        parser = transformers.HfArgumentParser((self.ModelArguments, self.DataArguments, self.TrainingArguments))  # type: ignore
         model_args, data_args, training_args = parser.parse_args_into_dataclasses(
             ["--output_dir", getattr(args, f"{args.model}_ckpt_save_path")]
         )
