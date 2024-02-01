@@ -22,7 +22,7 @@ def bleu(hyps, refs):
     #  Calculate bleu_1 and bleu_2.
     bleu_1 = []
     bleu_2 = []
-    for hyp, ref in tqdm(zip(hyps, refs)):
+    for hyp, ref in tqdm(zip(hyps, refs), total=len(hyps)):
         score = bleu_score.sentence_bleu(
             [ref], hyp, smoothing_function=SmoothingFunction().method7, weights=[1, 0, 0, 0]
         )
@@ -81,7 +81,7 @@ class CHAIR(object):
         image_id_to_objects: dict[int, set[str]] = {
             c["image_id"]: set() for c in captions if c["image_id"] in self.image_ids
         }
-        for c in tqdm(captions):
+        for c in tqdm(captions, total=len(captions)):
             if c["image_id"] in self.image_ids:
                 image_id_to_objects[c["image_id"]].update(self.caption_to_objects(c["caption"])[1])
         return image_id_to_objects
@@ -170,7 +170,7 @@ class CHAIR(object):
         num_hal_sent = 0
         num_caption_words = 0
         num_caption_chars = 0
-        for image_id, caption in tqdm(zip(image_ids, captions)):
+        for image_id, caption in zip(image_ids, captions):
             num_caption_words += len(caption.split())
             num_caption_chars += len(caption)
             obj_set = set()
@@ -205,12 +205,10 @@ def main():
     print("loading ground truth...")
     with open(os.path.join(args.annotation_path, "captions_train2014.json"), "r") as f:
         data = json.load(f)
-    ground_truth = []
-    for image_id in image_ids:
-        for image in data["annotations"]:
-            if image["image_id"] == image_id:
-                ground_truth.append(image["caption"])
-                break
+    id2caption = {}
+    for image in data["annotations"]:
+        id2caption[image["image_id"]] = image["caption"]
+    ground_truth = [id2caption[image_id] for image_id in image_ids]
 
     print("computing chair...")
     chair = CHAIR(args.annotation_path, args.synonyms_path, image_ids)

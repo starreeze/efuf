@@ -78,7 +78,7 @@ def blip_data_map(inputs: dict, add_end_sym=None) -> dict:
 
 
 def minigpt_generate(model, texts, images):
-    return model.generate(texts, images, max_new_tokens=args.max_new_tokens)
+    return model.generate(images, texts, max_new_tokens=args.max_new_tokens)
 
 
 def blip_generate(model, texts, images):
