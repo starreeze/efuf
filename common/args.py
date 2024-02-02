@@ -74,7 +74,7 @@ parser.add_argument(
 )  # 27k
 parser.add_argument("--gold_clip_score", type=float, default=40, help="clip score of the gold caption")
 
-parser.add_argument("--neg_w_start", type=float, default=0.3)
+parser.add_argument("--neg_w_start", type=float, default=0.4)
 parser.add_argument("--neg_w_end", type=float, default=0)
 parser.add_argument("--neg_w_start_step_pos", type=float, default=0.4)
 parser.add_argument("--neg_w_sched_type", type=str, default="linear")
@@ -89,7 +89,7 @@ parser.add_argument("--max_new_tokens", type=int, default=200, help="max number 
 parser.add_argument("--infer_dataloader_worker", type=int, default=0)
 parser.add_argument("--valid_data_split", type=float, default=0.05)
 parser.add_argument("--wandb_user", type=str, default="starreeze")
-parser.add_argument("--print_per_n_step", type=int, default=1)
+parser.add_argument("--print_per_n_step", type=int, default=5)
 parser.add_argument("--eval_per_epoch", type=int, default=4)
 
 ## models
@@ -163,6 +163,22 @@ parser.add_argument(
 parser.add_argument("--blip_path", type=str, default="checkpoints/blip_vicuna_7b/pretrained.pth")
 parser.add_argument("--blip_ckpt_load_path", type=str, default="checkpoints/blip_vicuna_7b/pretrained.pth")
 parser.add_argument("--blip_ckpt_save_path", type=str, default="checkpoints/blip_vicuna_7b")
+
+# mplug-owl: 
+parser.add_argument("--owl_path", type=str, default="/workspace/hal/checkpoints/mplug_OWL_llama_7b")
+parser.add_argument("--owl_ckpt_load_path", type=str, default="/workspace/hal/checkpoints/owl/1706760431.2430236") #todo tobe checked -> pass 
+
+parser.add_argument("--owl_ckpt_save_path", type=str, default="/workspace/hal/checkpoints/owl") #todo: tobe checked -> pass 
+parser.add_argument("--owl_use_bf16", type=bool, default=True)
+parser.add_argument("--owl_train_prompt", type=str, default='''The following is a conversation between a curious human and AI assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.
+Human: <image>
+Human: Please describe the image in great detail. Your response should have at least 100 words.
+AI: ''')
+
+parser.add_argument("--owl_eval_prompt", type=str, default='''The following is a conversation between a curious human and AI assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.
+Human: <image>
+Human: Please describe the image in great detail. Your response should have at least 100 words.
+AI: ''')
 
 ### llava
 parser.add_argument(
