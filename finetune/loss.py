@@ -95,9 +95,7 @@ def get_loss(
     loss_gold_weighted = loss_gold.mean() * args.gold_clip_score * args.gold_w
     loss_sent_weighted = (loss_sent * sent["score"]).mean() * args.sent_w
 
-    loss = (loss_pos_weighted + loss_gold_weighted + loss_sent_weighted - loss_neg_weighted) / (
-        pos_w + args.gold_w + args.sent_w - neg_w
-    )
+    loss = loss_pos_weighted + loss_gold_weighted + loss_sent_weighted - loss_neg_weighted
     return loss, loss_pos.mean(), loss_gold.mean(), loss_sent.mean(), loss_neg.mean()
 
 

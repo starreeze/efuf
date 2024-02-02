@@ -4,7 +4,7 @@
 "specific model behavior (model loading, data processing, etc.)"
 
 from __future__ import annotations
-import os, torch, transformers
+import os, re, torch, transformers
 from functools import partial
 from torch.nn import CrossEntropyLoss
 from common.args import args
@@ -79,17 +79,20 @@ def blip_data_map(inputs: dict, add_end_sym=None) -> dict:
 
 
 def minigpt_generate(model, texts, images):
-    return model.generate(images, texts, max_new_tokens=args.max_new_tokens)
+    kwargs = {"length_penalty": args.generate_length_penalty} if args.generate_length_penalty != -1 else {}
+    return model.generate(images, texts, max_new_tokens=args.max_new_tokens, num_beams=5, **kwargs)
 
 
 def blip_generate(model, texts, images):
     results = []
+    kwargs = {"length_penalty": args.generate_length_penalty} if args.generate_length_penalty != -1 else {}
     for text, image in zip(texts, images):
         res = model.generate(
             {"prompt": [text], "image": image.unsqueeze(0)},
             max_length=args.max_new_tokens,
             temperature=0.9,
             use_nucleus_sampling=True,
+            **kwargs,
         )
         results.extend(res)
     return results
@@ -106,17 +109,21 @@ def merge_batch_collator(*inputs: dict):
         else:
             raise NotImplementedError(f"Unknown type when concatenating: {type(inputs[0][k]).__name__}")
     return ret
+
+
 class OWl:
-    def load(self, ckpt: str, device='cuda', train=False, model_args: list[str]=[]) -> tuple[torch.nn.Module, torch.nn.Module]:
+    def load(
+        self, ckpt: str, device="cuda", train=False, model_args: list[str] = []
+    ) -> tuple[torch.nn.Module, torch.nn.Module]:
         from Owl.pipeline.interface import get_model
-        print(f"args.owl_path={args.owl_path}")
-        model, tokenizer, processor = get_model(args.owl_path, use_bf16=(args.train_dtype_str == 'bfloat16'))
+        from Owl.mplug_owl.modeling_mplug_owl import MplugOwlForConditionalGeneration
+
+        model: MplugOwlForConditionalGeneration
+        model, tokenizer, processor = get_model(args.owl_path, use_bf16=(args.train_dtype_str == "bfloat16"))  # type: ignore
         load_ckpt(model, ckpt, device)
+        model.to(device)
         if train:
-            model.to(device)
             model.train().to(args.train_dtype)
-            
-            
             model.language_model = model.language_model.eval()
             model.vision_model = model.vision_model.eval()
             for param in model.language_model.parameters():
@@ -125,73 +132,72 @@ class OWl:
                 param.requires_grad = False
         else:
             model.eval()
-        self.processor = processor 
+        self.processor = processor
         self.model = model
-        self.tokenizer = tokenizer 
-        return model, lambda image: processor(text=None, images=[image], return_tensors='pt')['pixel_values'][0] 
+        self.tokenizer = tokenizer
+        return model, lambda image: processor(text=None, images=[image], return_tensors="pt")["pixel_values"][0]  # type: ignore
 
-
-    def preprocess_text(self, input:str, output:str, add_end_sym) -> dict:
+    def preprocess_text(self, input: str, output: str, add_end_sym) -> dict:
         "参考了Owl/pipeline/data_utils/xgpt_data_utils.py/MutiModalDataset中_extract_text_token_from_conversation的实现"
 
-        media_tokens = ['<image>']
-        self.media_tokens = {k: -int(i+1) for i,k in enumerate(media_tokens)}
-        self.media_lengths = {'<image>': 1+64}
+        media_tokens = ["<image>"]
+        self.media_tokens = {k: -int(i + 1) for i, k in enumerate(media_tokens)}
+        self.media_lengths = {"<image>": 1 + 64}
         self.max_length = 512
-        enc_chunk = []   # tokenize后的input_ids（包含了input文本和output文本）
+        enc_chunk = []  # tokenize后的input_ids（包含了input文本和output文本）
         enc_length = 0  # tokenize后的input_ids的长度
-        prompt_length = -2 
-        if self.tokenizer.bos_token_id > 0:
+        prompt_length = -2
+        if self.tokenizer.bos_token_id > 0:  # type: ignore
             prompt_chunk = [self.tokenizer.bos_token_id]
         else:
             prompt_chunk = []
 
-        pattern = '|'.join(
-                map(re.escape, list(self.media_tokens.keys()) + ['AI: ', '\nHuman: ']))
-        input_chunk_strs = re.split(f'({pattern})', input)
+        pattern = "|".join(map(re.escape, list(self.media_tokens.keys()) + ["AI: ", "\nHuman: "]))
+        input_chunk_strs = re.split(f"({pattern})", input)
         input_chunk_strs = [x for x in input_chunk_strs if len(x) > 0]
+        label_chunk = []
 
         for idx, chunk_str in enumerate(input_chunk_strs):
             if idx == 0:
-                enc_chunk = prompt_chunk + self.tokenizer(chunk_str, add_special_tokens=False)['input_ids']
+                enc_chunk = prompt_chunk + self.tokenizer(chunk_str, add_special_tokens=False)["input_ids"]  # type: ignore
                 enc_length = len(enc_chunk)
-                label_chunk = [0] * enc_length  # input文本对应的input_ids部分的标签为0，为了之后生成mask，便于在loss计算中不参与计算
+                label_chunk = [
+                    0
+                ] * enc_length  # input文本对应的input_ids部分的标签为0，为了之后生成mask，便于在loss计算中不参与计算
             else:
                 if chunk_str in self.media_tokens:
                     enc_chunk += [self.media_tokens[chunk_str]] * self.media_lengths[chunk_str]
                     enc_length += self.media_lengths[chunk_str]
-                    label_chunk += [0] * self.media_lengths[chunk_str]
+                    label_chunk += [0] * self.media_lengths[chunk_str]  # type: ignore
                 else:
-                    if input_chunk_strs[idx-1] == 'AI:':
-                        curr_chunk = self.tokenizer(
-                            chunk_str, add_special_tokens=False
-                        )['input_ids']
+                    if input_chunk_strs[idx - 1] == "AI:":
+                        curr_chunk: list[int] = self.tokenizer(chunk_str, add_special_tokens=False)["input_ids"]  # type: ignore
                         # if True:
                         #     if enc_length + len(curr_chunk) >= self.max_length:
                         #         curr_chunk = curr_chunk[:self.max_length-enc_length]
                         #         curr_chunk += [self.tokenizer.eos_token_id]#!: 删去了这个位置的添加
-                    # else:
-                        if enc_length + len(curr_chunk) >= self.max_length+1:
-                            curr_chunk = curr_chunk[:self.max_length+1-enc_length]
+                        # else:
+                        if enc_length + len(curr_chunk) >= self.max_length + 1:
+                            curr_chunk = curr_chunk[: self.max_length + 1 - enc_length]
                         enc_length += len(curr_chunk)
                         enc_chunk += curr_chunk
                         label_chunk += [0] * len(curr_chunk)
                     else:
-                        curr_chunk = self.tokenizer(chunk_str, add_special_tokens=False)['input_ids']
-                        if enc_length + len(curr_chunk) >= self.max_length+1:
-                            curr_chunk = curr_chunk[:self.max_length+1-enc_length]
+                        curr_chunk = self.tokenizer(chunk_str, add_special_tokens=False)["input_ids"]  # type: ignore
+                        if enc_length + len(curr_chunk) >= self.max_length + 1:
+                            curr_chunk = curr_chunk[: self.max_length + 1 - enc_length]
                         enc_length += len(curr_chunk)
                         enc_chunk += curr_chunk
                         label_chunk += [0] * len(curr_chunk)
-        #! 改了一下self.tokenizer.eos_token_id的添加位置 
-        output_chunk = self.tokenizer(output, add_special_tokens=False)['input_ids']
+        #! 改了一下self.tokenizer.eos_token_id的添加位置
+        output_chunk: list[int] = self.tokenizer(output, add_special_tokens=False)["input_ids"]  # type: ignore
         if add_end_sym:
             if enc_length + len(output_chunk) >= self.max_length:
-                output_chunk = output_chunk[:self.max_length-enc_length]
-            output_chunk += [self.tokenizer.eos_token_id]
+                output_chunk = output_chunk[: self.max_length - enc_length]
+            output_chunk += [self.tokenizer.eos_token_id]  # type: ignore
         else:
-            if enc_length + len(output_chunk) >= self.max_length+1:
-                output_chunk = output_chunk[:self.max_length+1-enc_length]
+            if enc_length + len(output_chunk) >= self.max_length + 1:
+                output_chunk = output_chunk[: self.max_length + 1 - enc_length]
         enc_length += len(output_chunk)
         enc_chunk += output_chunk
         label_chunk += [1] * len(output_chunk)
@@ -201,39 +207,46 @@ class OWl:
             padding_chunk = [self.tokenizer.pad_token_id] * (self.max_length + 1 - enc_length)
             padding_length = len(padding_chunk)
             label_chunk += [0] * (self.max_length + 1 - enc_length)
-            enc_chunk = enc_chunk + padding_chunk 
+            enc_chunk = enc_chunk + padding_chunk
         else:
-            padding_length = 0 
-        
-        assert enc_length + padding_length == self.max_length + 1 
+            padding_length = 0
+
+        assert enc_length + padding_length == self.max_length + 1
         assert len(label_chunk) == self.max_length + 1
 
         # 计算loss 时用到的mask
-        non_padding_mask = [1 if i < enc_length -1 else 0 for i in range(self.max_length)] # mask掉padding部分
-         
+        non_padding_mask = [1 if i < enc_length - 1 else 0 for i in range(self.max_length)]  # mask掉padding部分
+
         enc_chunk = torch.tensor(enc_chunk).long()
         non_padding_mask = torch.tensor(non_padding_mask).long()
-        prompt_mask = torch.tensor(label_chunk[1:]).long() # mask掉input文本部分
-        prompt_length = torch.tensor([prompt_length]).long()    
+        prompt_mask = torch.tensor(label_chunk[1:]).long()  # mask掉input文本部分
+        prompt_length = torch.tensor([prompt_length]).long()
 
         tmp_enc_chunk = enc_chunk.clone()
         tmp_enc_chunk[tmp_enc_chunk >= 0] = 1
         tmp_enc_chunk[tmp_enc_chunk < 0] = 0
-        non_media_mask = torch.tensor(tmp_enc_chunk).long() # mask掉'<image>'部分(好像没必要，因为在ouput文本中不会出现'<image>'应该)
+        non_media_mask = torch.tensor(
+            tmp_enc_chunk
+        ).long()  # mask掉'<image>'部分(好像没必要，因为在ouput文本中不会出现'<image>'应该)
         non_media_mask = non_media_mask[1:].long()
 
         # model在forward中最终计算loss时候用的mask是 non_padding_mask * non_media_mask * prompt_mask
 
-        return {'input_ids': enc_chunk, "prompt_length": prompt_length, 'seq_length': enc_length,
-        "non_padding_mask": non_padding_mask, 'non_media_mask': non_media_mask, 'prompt_mask': prompt_mask}
-
+        return {
+            "input_ids": enc_chunk,
+            "prompt_length": prompt_length,
+            "seq_length": enc_length,
+            "non_padding_mask": non_padding_mask,
+            "non_media_mask": non_media_mask,
+            "prompt_mask": prompt_mask,
+        }
 
     def data_map(self, inputs: dict, add_end_sym=True) -> dict:
         global debug_print_for_1
-        final_text_input = self.preprocess_text(inputs['input'], inputs['output'], add_end_sym=add_end_sym)
+        final_text_input = self.preprocess_text(inputs["input"], inputs["output"], add_end_sym=add_end_sym)
         return {
             "image": inputs["image"].unsqueeze(0),
-            "text": final_text_input, 
+            "text": final_text_input,
             "score": inputs["score"],
         }
 
@@ -244,13 +257,15 @@ class OWl:
             image = None
         else:
             image = torch.cat([img for img in image if img is not None], dim=0)
-        num_images_per_sample = torch.LongTensor([data["image"].size(0) if data['image'] is not None else 0 for data in batch])
+        num_images_per_sample = torch.LongTensor(
+            [data["image"].size(0) if data["image"] is not None else 0 for data in batch]
+        )
 
-        text = torch.stack([torch.LongTensor(data["text"]['input_ids']) for data in batch], dim=0)
-        non_padding_mask = torch.stack([torch.LongTensor(data["text"]['non_padding_mask']) for data in batch], dim=0)
-        non_media_mask = torch.stack([torch.LongTensor(data["text"]['non_media_mask']) for data in batch], dim=0)
-        prompt_mask = torch.stack([torch.LongTensor(data["text"]['prompt_mask']) for data in batch], dim=0)
-        
+        text = torch.stack([torch.LongTensor(data["text"]["input_ids"]) for data in batch], dim=0)
+        non_padding_mask = torch.stack([torch.LongTensor(data["text"]["non_padding_mask"]) for data in batch], dim=0)
+        non_media_mask = torch.stack([torch.LongTensor(data["text"]["non_media_mask"]) for data in batch], dim=0)
+        prompt_mask = torch.stack([torch.LongTensor(data["text"]["prompt_mask"]) for data in batch], dim=0)
+
         output_batch = {
             "pixel_values": image,
             "image": image,
@@ -260,49 +275,50 @@ class OWl:
             "non_padding_mask": non_padding_mask.long(),
             "non_media_mask": non_media_mask.long(),
             "prompt_mask": prompt_mask.long(),
-            "attention_mask": text.ne(self.tokenizer.pad_token_id).to(torch.long),       
-            "score": torch.tensor([x['score'] for x in batch]).unsqueeze(1),
+            "attention_mask": text.ne(self.tokenizer.pad_token_id).to(torch.long),  # type: ignore
+            "score": torch.tensor([x["score"] for x in batch]).unsqueeze(1),
         }
         return output_batch
 
-    
     @staticmethod
     def forward(model: torch.nn.Module, samples: dict, add_end_sym=False):
-        result, labels, loss_mask = model(pixel_values=samples['pixel_values'],
-                     input_ids=samples['input_ids'],
-                     labels=samples['labels'],
-                     num_images=samples['num_images'],
-                     non_padding_mask=samples['non_padding_mask'],
-                     non_media_mask=samples['non_media_mask'],
-                     prompt_mask=samples['prompt_mask'],
-                     attention_mask=samples["attention_mask"],
-                     return_dict=True) # 更改了一下原模型中的forward的逻辑，增添了labels和loss_mask的返回
-        
-        logits = result['logits'] #8,2049, 32000
-        bs = logits.shape[0] #8
-        shift_logits = logits[..., :-1, :].contiguous() # 8, 2048, 32000
-        shift_labels = labels[..., 1:].contiguous() # 8,2048
-        loss_fct = CrossEntropyLoss(reduction='none')
-        shift_logits = shift_logits.view(-1, model.language_model.config.vocab_size) # 16384, 32000
-        shift_labels = shift_labels.view(-1) # 8*2048
-        shift_labels = shift_labels.to(shift_logits.device) 
+        result, labels, loss_mask = model(
+            pixel_values=samples["pixel_values"],
+            input_ids=samples["input_ids"],
+            labels=samples["labels"],
+            num_images=samples["num_images"],
+            non_padding_mask=samples["non_padding_mask"],
+            non_media_mask=samples["non_media_mask"],
+            prompt_mask=samples["prompt_mask"],
+            attention_mask=samples["attention_mask"],
+            return_dict=True,
+        )  # 更改了一下原模型中的forward的逻辑，增添了labels和loss_mask的返回
+
+        logits = result["logits"]  # 8,2049, 32000
+        bs = logits.shape[0]  # 8
+        shift_logits = logits[..., :-1, :].contiguous()  # 8, 2048, 32000
+        shift_labels = labels[..., 1:].contiguous()  # 8,2048
+        loss_fct = CrossEntropyLoss(reduction="none")
+        shift_logits = shift_logits.view(-1, model.language_model.config.vocab_size)  # type: ignore
+        shift_labels = shift_labels.view(-1)  # 8*2048
+        shift_labels = shift_labels.to(shift_logits.device)
         loss = loss_fct(shift_logits, shift_labels).view(bs, -1)
         return loss
 
-    def generate(self, model, texts: list[str], images:torch.Tensor):
+    def generate(self, model, texts: list[str], images: torch.Tensor):
         "参考了Owl/pipeline/interface.py中的do_generate函数，并在interface.py中进行了初步测试"
         answers = []
         for i in range(len(texts)):
             text = [texts[i]]
             image = images[i].unsqueeze(0)
-            inputs = self.processor(text=text, images=None, return_tensors='pt')
-            inputs['pixel_values'] = image
+            inputs = self.processor(text=text, images=None, return_tensors="pt")
+            inputs["pixel_values"] = image
             inputs = {k: v.bfloat16() if v.dtype == torch.float else v for k, v in inputs.items()}
             inputs = {k: v.to(model.device) for k, v in inputs.items()}
+            kwargs = {"length_penalty": args.generate_length_penalty} if args.generate_length_penalty != -1 else {}
             with torch.no_grad():
-                res = model.generate(**inputs, max_length=512, top_k=5, do_sample=True)
+                res = model.generate(**(inputs | kwargs), max_length=512, top_p=0.9, temperature=1, num_beams=5)
             sentence = self.tokenizer.decode(res.tolist()[0], skip_special_tokens=True)
-            print(f'image{i}: sentence={sentence}')
             answers.append(sentence)
         return answers
 
@@ -427,6 +443,7 @@ class LlavaModel:
             model.lm_head,
         ]
         for module in freeze_modules:
+            module.eval()
             for param in module.parameters():
                 param.requires_grad = False
 
@@ -504,6 +521,7 @@ class LlavaModel:
         # as the prompt are all the same, it can be copied from the first prompt
         # mind the padding if want to modify it into vqa
         input_ids = input_ids.unsqueeze(0).expand([len(texts), -1]).cuda()
+        kwargs = {"length_penalty": args.generate_length_penalty} if args.generate_length_penalty != -1 else {}
         with torch.inference_mode():
             output_ids = model.generate(
                 input_ids,
@@ -513,6 +531,7 @@ class LlavaModel:
                 num_beams=5,
                 # no_repeat_ngram_size=3,
                 max_new_tokens=args.max_new_tokens,
+                **kwargs,
             )
         texts = self.tokenizer.batch_decode(output_ids[:, input_ids.shape[1] :], skip_special_tokens=True)
         # as the prompt is in the format of ### human/gpt, we need to truncate the generation to the next ###
@@ -553,7 +572,7 @@ sample_collators = {
     "blip": None,
     "llava": llava_model.collator,
     "share4v": llava_model.collator,
-    "owl": owl_model.collator, 
+    "owl": owl_model.collator,
 }
 batch_collators = {
     "minigpt": merge_batch_collator,

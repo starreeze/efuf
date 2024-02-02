@@ -37,7 +37,9 @@ parser.add_argument("--clip_prompt", type=str, default="A photo containing ")
 # insight
 ## model
 ### llm for object extraction
-parser.add_argument("--llama_path", type=str, default="meta-llama/Llama-2-13b-chat-hf")
+parser.add_argument(
+    "--llama_path", type=str, default="/root/.cache/huggingface/hub/models--meta-llama--Llama-2-13b-chat-hf"
+)
 parser.add_argument("--llama_8bit", action="store_true")
 llama_instruction_placeholder = "$$$"
 llama_sys_prompt = (
@@ -74,7 +76,7 @@ parser.add_argument(
 )  # 27k
 parser.add_argument("--gold_clip_score", type=float, default=40, help="clip score of the gold caption")
 
-parser.add_argument("--neg_w_start", type=float, default=0.4)
+parser.add_argument("--neg_w_start", type=float, default=0.3)
 parser.add_argument("--neg_w_end", type=float, default=0)
 parser.add_argument("--neg_w_start_step_pos", type=float, default=0.4)
 parser.add_argument("--neg_w_sched_type", type=str, default="linear")
@@ -164,21 +166,28 @@ parser.add_argument("--blip_path", type=str, default="checkpoints/blip_vicuna_7b
 parser.add_argument("--blip_ckpt_load_path", type=str, default="checkpoints/blip_vicuna_7b/pretrained.pth")
 parser.add_argument("--blip_ckpt_save_path", type=str, default="checkpoints/blip_vicuna_7b")
 
-# mplug-owl: 
-parser.add_argument("--owl_path", type=str, default="/workspace/hal/checkpoints/mplug_OWL_llama_7b")
-parser.add_argument("--owl_ckpt_load_path", type=str, default="/workspace/hal/checkpoints/owl/1706760431.2430236") #todo tobe checked -> pass 
-
-parser.add_argument("--owl_ckpt_save_path", type=str, default="/workspace/hal/checkpoints/owl") #todo: tobe checked -> pass 
-parser.add_argument("--owl_use_bf16", type=bool, default=True)
-parser.add_argument("--owl_train_prompt", type=str, default='''The following is a conversation between a curious human and AI assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.
+### mplug-owl:
+parser.add_argument("--owl_path", type=str, default="/root/.cache/huggingface/hub/models--MAGAer13--mplug-owl-llama-7b")
+parser.add_argument(
+    "--owl_ckpt_load_path", type=str, default="/root/.cache/huggingface/hub/models--MAGAer13--mplug-owl-llama-7b"
+)  # todo tobe checked -> pass
+parser.add_argument("--owl_ckpt_save_path", type=str, default="checkpoints/owl-llama-7b")  # todo: tobe checked -> pass
+parser.add_argument(
+    "--owl_train_prompt",
+    type=str,
+    default="""The following is a conversation between a curious human and AI assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.
+Human: <image>
+Human: Please describe the image.
+AI: """,
+)
+parser.add_argument(
+    "--owl_eval_prompt",
+    type=str,
+    default="""The following is a conversation between a curious human and AI assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.
 Human: <image>
 Human: Please describe the image in great detail. Your response should have at least 100 words.
-AI: ''')
-
-parser.add_argument("--owl_eval_prompt", type=str, default='''The following is a conversation between a curious human and AI assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.
-Human: <image>
-Human: Please describe the image in great detail. Your response should have at least 100 words.
-AI: ''')
+AI: """,
+)
 
 ### llava
 parser.add_argument(
