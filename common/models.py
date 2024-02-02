@@ -14,10 +14,9 @@ from typing import Optional
 
 def load_ckpt(model, ckpt, device="cuda"):
     "load the trainable part from ckpt"
-    # original_path_name = "llava_path" if args.model == "llava" else f"{args.model}_ckpt_load_path"
-    # if ckpt == getattr(args, original_path_name):
-    #     print(f"Already loaded the original version from {ckpt}")
-    #     return
+    if ckpt == getattr(args, f"{args.model}_path"):
+        print(f"Already loaded the original version from {ckpt}")
+        return
     latest = ckpt if os.path.isfile(ckpt) else os.path.join(ckpt, sorted(os.listdir(ckpt))[-1])
     print(f"Loading from {latest}")
     checkpoint = torch.load(latest, map_location=device)
