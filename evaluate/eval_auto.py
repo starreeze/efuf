@@ -14,6 +14,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 from common.args import args
 from common.utils import merge_dict_set
+from evaluate.eval_utils import get_eval_caption
 from nltk.translate import bleu_score
 from nltk.translate.bleu_score import SmoothingFunction
 
@@ -189,18 +190,7 @@ class CHAIR(object):
 
 def main():
     print("loading eval...")
-    with open(args.caption_eval_path, "r") as f:
-        content: list[str] = f.read().splitlines()
-    image_ids, captions = [], []
-    eval_end_pos = args.default_eval_samples if args.end_pos == int(1e10) else args.end_pos
-    for line in content[args.start_pos : eval_end_pos]:
-        try:
-            image_name, caption = line.replace("### gpt: ", "").split("###")[:2]
-        except ValueError as e:
-            print(f"Skipping line {line} due to {e}")
-            continue
-        image_ids.append(int(image_name.split("_")[-1].split(".")[0]))
-        captions.append(caption)
+    image_ids, captions = get_eval_caption()
 
     print("loading ground truth...")
     with open(os.path.join(args.annotation_path, "captions_train2014.json"), "r") as f:
