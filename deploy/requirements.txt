@@ -31,3 +31,4 @@ pyyaml_env_tag
 open3d
 h5py
 diffusers==0.15.0
+seaborn

@@ -11,6 +11,7 @@ import numpy as np
 from PIL import Image
 from matplotlib import pyplot as plt
 from scipy.stats import ttest_ind
+import seaborn as sns
 from transformers import CLIPProcessor, CLIPModel
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -193,13 +194,23 @@ class ClipInfer:
 def plot_histogram(hal, norm, filename="result.png", bins=np.arange(15, 40, 1)):
     hal = hal[hal != np.nan]
     norm = norm[norm != np.nan]
-    plt.hist(hal, bins=bins, color="red", edgecolor="black", alpha=0.5)  # type: ignore
-    plt.hist(norm, bins=bins, color="blue", edgecolor="black", alpha=0.5)  # type: ignore
+
+    plt.figure(figsize=(12, 9))
+    c1, c2 = args.run_name.split("_") if "_" in args.run_name else (None, None)
+    sns.kdeplot(norm, bw_adjust=0.8, label="Non-hallucinated", fill=True, color=c2)
+    sns.kdeplot(hal, bw_adjust=0.8, label="Hallucinated", fill=True, color=c1)
+    # plt.hist(hal, bins=bins, color="red", edgecolor="black", alpha=0.5)  # type: ignore
+    # plt.hist(norm, bins=bins, color="blue", edgecolor="black", alpha=0.5)  # type: ignore
+    plt.xlabel("Image Relevance", fontsize=26)
+    plt.ylabel("Frequency", fontsize=26)
+    plt.xticks(fontsize=26)
+    plt.yticks(fontsize=26)
+    plt.legend(fontsize=26)
     plt.savefig(filename)
     plt.close()
 
 
-def infer_object_image(bar_position=0, plot=True):
+def infer_object_image(bar_position=0, print=True, plot=True):
     if not os.path.exists(args.hal_result_path) or args.restart:
         processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32", local_files_only=True)
         clip = ClipInfer()
@@ -234,11 +245,6 @@ def infer_object_image(bar_position=0, plot=True):
     all_std = np.nanstd(np.concatenate([hal, norm], axis=0))
     p_value_all = ttest_ind(hal, norm).pvalue
 
-    identifier = f"p{args.patch_size:03d}-w{args.window_size:02d}-a{args.average_top_k:02d}"
-    tqdm.write(identifier)
-    tqdm.write(f"hal: mean {hal_mean} std: {hal_std}")
-    tqdm.write(f"norm: mean {norm_mean} std: {norm_std}")
-    tqdm.write(f"p-value-all: {p_value_all}")
     min_len = min(len(hal), len(norm))
     if args.sample_policy == "random":
         np.random.seed(args.seed)
@@ -246,8 +252,15 @@ def infer_object_image(bar_position=0, plot=True):
     elif args.sample_policy == "max":
         hal = np.sort(hal)[:min_len]
         norm = np.sort(norm)[-min_len:]
+
     p_value_hist = ttest_ind(hal, norm).pvalue
-    tqdm.write(f"p-value-hist: {p_value_hist}")
+    identifier = f"p{args.patch_size:03d}-w{args.window_size:02d}-a{args.average_top_k:02d}"
+    if print:
+        tqdm.write(identifier)
+        tqdm.write(f"hal: mean {hal_mean} std: {hal_std}")
+        tqdm.write(f"norm: mean {norm_mean} std: {norm_std}")
+        tqdm.write(f"p-value-all: {p_value_all}")
+        tqdm.write(f"p-value-hist: {p_value_hist}")
     if plot:
         plot_histogram(hal[:min_len], norm[:min_len], filename=identifier)
     return hal_mean, norm_mean, all_std, p_value_all, p_value_hist

@@ -3,6 +3,7 @@
 # @Author  : Shangyu.Xing (starreeze@foxmail.com)
 
 import argparse, torch
+from time import time
 
 parser = argparse.ArgumentParser()
 # data
@@ -250,13 +251,14 @@ parser.add_argument("--generate_length_penalty", type=float, default=-1)
 # common control
 parser.add_argument("--device", type=str, default="cuda:0")
 parser.add_argument("--restart", action="store_true")
-parser.add_argument("--seed", type=int, default=28509)
+parser.add_argument("--seed", type=int, default=10654)
 parser.add_argument("--start_pos", type=int, default=0)
 parser.add_argument("--end_pos", type=int, default=int(1e10))
 parser.add_argument("--proxy", type=str, default="")
 parser.add_argument("--train_dtype_str", type=str, default="bfloat16")
 parser.add_argument("--dry_run", action="store_true")
 parser.add_argument("--no_first_eval", action="store_true")
+parser.add_argument("--run_name", type=str, default=str(time()))
 
 args = parser.parse_args()
 args.infer_bs_pos = args.train_bs_pos * args.infer_bs_multiply

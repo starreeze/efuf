@@ -151,7 +151,10 @@ def main():
 
     if args.dry_run:
         exit(0)
-    args.ckpt_save_path = os.path.join(getattr(args, f"{args.model}_ckpt_save_path"), str(time()))
+    args.ckpt_save_path = os.path.join(getattr(args, f"{args.model}_ckpt_save_path"), args.run_name)
+    if os.path.exists(args.ckpt_save_path):
+        args.ckpt_save_path = os.path.join(getattr(args, f"{args.model}_ckpt_save_path"), str(time()))
+        print(f"ckpt_save_path exists, saving ckpt to {args.ckpt_save_path}.")
     train(model, train_pos, train_gold, train_sent, train_neg, valid_pos, valid_gold, valid_sent, valid_neg, optim)
     evaluate(model, valid_pos, valid_gold, valid_sent, valid_neg)
     save_ckpt(model, len(train_neg))

@@ -39,14 +39,14 @@ def search_seed():
     best_seed, best_p = 0, 1
     for seed in tqdm(range(100000)):
         args.seed = seed
-        p = infer_object_image(bar_position=1, plot=False)[-1]
-        tqdm.write(f"seed={seed}")
+        p = infer_object_image(bar_position=1, plot=False, print=False)[-1]
+        # tqdm.write(f"seed={seed}, p={p}")
         if p and p < best_p:
             best_p = p
             best_seed = seed
     print(f"max_seed={best_seed}")
     args.seed = best_seed
-    infer_object_image(plot=True)
+    infer_object_image()
 
 
 if __name__ == "__main__":
