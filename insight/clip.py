@@ -191,21 +191,28 @@ class ClipInfer:
         return hals, norms
 
 
-def plot_histogram(hal, norm, filename="result.png", bins=np.arange(15, 40, 1)):
+def plot_histogram(hal, norm, filename="result.pdf"):
     hal = hal[hal != np.nan]
     norm = norm[norm != np.nan]
 
     plt.figure(figsize=(12, 9))
-    c1, c2 = args.run_name.split("_") if "_" in args.run_name else (None, None)
-    sns.kdeplot(norm, bw_adjust=0.8, label="Non-hallucinated", fill=True, color=c2)
+    # plt.tight_layout()
+    plt.subplots_adjust(left=0.17, right=0.97, top=0.95, bottom=0.15)
+    c1, c2, y_max = args.run_name.split("_")
+    if not c1:
+        c1 = "tab:orange"
+    if not c2:
+        c2 = "tab:blue"
+
     sns.kdeplot(hal, bw_adjust=0.8, label="Hallucinated", fill=True, color=c1)
-    # plt.hist(hal, bins=bins, color="red", edgecolor="black", alpha=0.5)  # type: ignore
-    # plt.hist(norm, bins=bins, color="blue", edgecolor="black", alpha=0.5)  # type: ignore
-    plt.xlabel("Image Relevance", fontsize=26)
-    plt.ylabel("Frequency", fontsize=26)
-    plt.xticks(fontsize=26)
-    plt.yticks(fontsize=26)
-    plt.legend(fontsize=26)
+    sns.kdeplot(norm, bw_adjust=0.8, label="Non-hallucinated", fill=True, color=c2)
+    plt.xlabel("Image Relevance", fontsize=32)
+    plt.ylabel("Frequency", fontsize=32)
+    plt.xticks(fontsize=28)
+    plt.yticks(fontsize=28)
+    if y_max:
+        plt.ylim(top=float(y_max))
+    plt.legend(fontsize=32)
     plt.savefig(filename)
     plt.close()
 
@@ -245,7 +252,7 @@ def infer_object_image(bar_position=0, print=True, plot=True):
     all_std = np.nanstd(np.concatenate([hal, norm], axis=0))
     p_value_all = ttest_ind(hal, norm).pvalue
 
-    min_len = min(len(hal), len(norm))
+    min_len = min(len(hal), len(norm), args.end_pos)
     if args.sample_policy == "random":
         np.random.seed(args.seed)
         hal, norm = np.random.choice(hal, min_len), np.random.choice(norm, min_len)
@@ -262,7 +269,7 @@ def infer_object_image(bar_position=0, print=True, plot=True):
         tqdm.write(f"p-value-all: {p_value_all}")
         tqdm.write(f"p-value-hist: {p_value_hist}")
     if plot:
-        plot_histogram(hal[:min_len], norm[:min_len], filename=identifier)
+        plot_histogram(hal[:min_len], norm[:min_len], filename=identifier + ".pdf")
     return hal_mean, norm_mean, all_std, p_value_all, p_value_hist
 
 
