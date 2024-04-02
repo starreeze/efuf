@@ -144,7 +144,7 @@ def main():
     train_sent, valid_sent = load_datasets(
         vis_processor, args.train_bs_sent, args.infer_bs_sent, "sentence", continuous=True
     )
-    train_neg, valid_neg = load_datasets(vis_processor, args.train_bs_neg, args.infer_bs_eng, type=-1, continuous=False)
+    train_neg, valid_neg = load_datasets(vis_processor, args.train_bs_neg, args.infer_bs_neg, type=-1, continuous=False)
     print("Datasets loaded.")
 
     optim = AdamW(model.parameters(), lr=args.train_lr, weight_decay=args.train_wd)

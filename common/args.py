@@ -119,6 +119,7 @@ parser.add_argument(
 )
 parser.add_argument("--train_bs_neg", type=int, default=1, help="number of negative samples in a batch")
 parser.add_argument("--infer_bs_total", type=int, default=0, help="overwrite infer multiply for generatrion")
+parser.add_argument("--train_bs_total", type=int, default=0, help="overwrite train for evaluation")
 parser.add_argument("--train_lr", type=float, default=1e-5)
 parser.add_argument("--train_wd", type=float, default=0.05)
 parser.add_argument("--train_epoch", type=int, default=1)
@@ -189,6 +190,14 @@ Human: <image>
 Human: Please describe the image in great detail. Your response should have at least 100 words.
 AI: """,
 )
+parser.add_argument(
+    "--owl_eval_pope_prompt",
+    type=str,
+    default="""The following is a conversation between a curious human and AI assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.
+Human: <image>
+Human: According to the given image, answer yes or no to the question faithfully: {question}
+AI: """,
+)
 
 ### llava
 parser.add_argument(
@@ -198,6 +207,11 @@ parser.add_argument(
     "--llava_eval_prompt",
     type=str,
     default="### human: <image>\n Please describe the image in great detail. Your response should have at least 100 words. \n### gpt:",
+)
+parser.add_argument(
+    "--llava_eval_pope_prompt",
+    type=str,
+    default="### human: <image>\n According to the given image, answer yes or no to the question faithfully: {question} \n### gpt:",
 )
 parser.add_argument(
     "--llava_ckpt_load_path",
@@ -226,6 +240,11 @@ parser.add_argument(
     default="### human: <image>\n Please describe the image in great detail. Your response should have at least 100 words. \n### gpt:",
 )
 parser.add_argument(
+    "--share4v_eval_pope_prompt",
+    type=str,
+    default="### human: <image>\n According to the given image, answer yes or no to the question faithfully: {question} \n### gpt:",
+)
+parser.add_argument(
     "--share4v_ckpt_load_path",
     type=str,
     default="/root/.cache/huggingface/hub/models--Lin-Chen--ShareGPT4V-7B/snapshots/a973da7d8dba5e9ac2817f1c88bf9c8f36004078",
@@ -244,7 +263,6 @@ parser.add_argument("--share4v_ckpt_save_path", type=str, default="checkpoints/s
 
 # eval
 parser.add_argument("--pope_result_path", type=str, default="evaluate/pope/result")
-parser.add_argument("--pope_max_new_tokens", type=int, default=20)
 parser.add_argument("--default_eval_samples", type=int, default=1600)
 parser.add_argument("--generate_length_penalty", type=float, default=-1)
 
@@ -263,10 +281,12 @@ parser.add_argument("--run_name", type=str, default=str(time()))
 args = parser.parse_args()
 args.infer_bs_pos = args.train_bs_pos * args.infer_bs_multiply
 args.infer_bs_sent = args.train_bs_sent * args.infer_bs_multiply
-args.infer_bs_eng = args.train_bs_neg * args.infer_bs_multiply
+args.infer_bs_neg = args.train_bs_neg * args.infer_bs_multiply
 args.infer_bs_gold = args.train_bs_gold * args.infer_bs_multiply
+if args.train_bs_total == 0:
+    args.train_bs_total = args.train_bs_pos + args.train_bs_sent + args.train_bs_neg + args.train_bs_gold
 if args.infer_bs_total == 0:
-    args.infer_bs_total = args.infer_bs_pos + args.infer_bs_sent + args.infer_bs_eng + args.infer_bs_gold
+    args.infer_bs_total = args.infer_bs_pos + args.infer_bs_sent + args.infer_bs_neg + args.infer_bs_gold
 
 args.train_dtype = getattr(torch, args.train_dtype_str)
 

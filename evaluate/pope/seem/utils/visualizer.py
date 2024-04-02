@@ -19,6 +19,7 @@ from detectron2.utils.file_io import PathManager
 
 from detectron2.utils.colormap import random_color
 
+setattr(np, "bool", bool)
 logger = logging.getLogger(__name__)
 __all__ = ["ColorMode", "VisImage", "Visualizer"]
 

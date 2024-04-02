@@ -121,7 +121,7 @@ class OWl:
         model: MplugOwlForConditionalGeneration
         model, tokenizer, processor = get_model(args.owl_path, use_bf16=(args.train_dtype_str == "bfloat16"))  # type: ignore
         load_ckpt(model, ckpt, device)
-        model.to(device)
+        model.to(device)  # type: ignore
         if train:
             model.train().to(args.train_dtype)
             model.language_model = model.language_model.eval()
@@ -313,7 +313,7 @@ class OWl:
             image = images[i].unsqueeze(0)
             inputs = self.processor(text=text, images=None, return_tensors="pt")
             inputs["pixel_values"] = image
-            inputs = {k: v.bfloat16() if v.dtype == torch.float else v for k, v in inputs.items()}
+            inputs = {k: v.to(model.dtype) if v.dtype == torch.float else v for k, v in inputs.items()}
             inputs = {k: v.to(model.device) for k, v in inputs.items()}
             kwargs = {"length_penalty": args.generate_length_penalty} if args.generate_length_penalty != -1 else {}
             with torch.no_grad():
@@ -394,7 +394,7 @@ class LlavaModel:
         )
 
         dtype = args.train_dtype if train else torch.float16
-        model: VLM = VLM.from_pretrained(
+        model: VLM = VLM.from_pretrained(  # XXX error!
             args.llava_path, local_files_only=True, device_map={"": device}, torch_dtype=dtype
         )  # type: ignore
         model.config.use_cache = False
@@ -517,25 +517,29 @@ class LlavaModel:
         return loss
 
     def generate(self, model, texts, images):
-        input_ids: torch.Tensor = self.tokenize_image(texts[0])  # type: ignore
+        # input_ids: torch.Tensor = self.tokenize_image(texts[0])  # type: ignore
         # as the prompt are all the same, it can be copied from the first prompt
         # mind the padding if want to modify it into vqa
-        input_ids = input_ids.unsqueeze(0).expand([len(texts), -1]).cuda()
+        # input_ids = input_ids.unsqueeze(0).expand([len(texts), -1]).cuda()
+        results = []
         kwargs = {"length_penalty": args.generate_length_penalty} if args.generate_length_penalty != -1 else {}
-        with torch.inference_mode():
-            output_ids = model.generate(
-                input_ids,
-                images=images.half().cuda(),
-                temperature=1,
-                top_p=0.9,
-                num_beams=5,
-                # no_repeat_ngram_size=3,
-                max_new_tokens=args.max_new_tokens,
-                **kwargs,
-            )
-        texts = self.tokenizer.batch_decode(output_ids[:, input_ids.shape[1] :], skip_special_tokens=True)
-        # as the prompt is in the format of ### human/gpt, we need to truncate the generation to the next ###
-        return [text.replace("### gpt: ", "").split("###")[0] for text in texts]
+        for text, image in zip(texts, images):
+            input_ids: torch.Tensor = self.tokenize_image(text).cuda().unsqueeze(0)  # type: ignore
+            with torch.inference_mode():
+                output_ids = model.generate(
+                    input_ids,
+                    images=image.unsqueeze(0).half().cuda(),
+                    temperature=1,
+                    top_p=0.9,
+                    num_beams=5,
+                    # no_repeat_ngram_size=3,
+                    max_new_tokens=args.max_new_tokens,
+                    **kwargs,
+                )
+            result = self.tokenizer.batch_decode(output_ids[:, input_ids.shape[1] :], skip_special_tokens=True)[0]
+            # as the prompt is in the format of ### human/gpt, we need to truncate the generation to the next ###
+            results.append(result.replace("### gpt: ", "").split("###")[0])
+        return results
 
     def pad_batch_collator(self, *inputs: dict):
         "a higher level collator that collate multiple batches into one, by padding the ids/masks and merging other data"
