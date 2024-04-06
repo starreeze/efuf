@@ -4,3 +4,4 @@ checkpoint*
 tmp.txt
 *.png
 finetune/sent_stat.py
+*.bak

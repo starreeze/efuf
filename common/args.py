@@ -4,6 +4,7 @@
 
 import argparse, torch
 from time import time
+from itertools import product
 
 parser = argparse.ArgumentParser()
 # data
@@ -34,6 +35,19 @@ parser.add_argument("--column_splitter", type=str, default=" ### ")
 parser.add_argument("--object_splitter", type=str, default=", ")
 parser.add_argument("--subsentence_splitter_set", type=str, default=",.;!?:")
 parser.add_argument("--clip_prompt", type=str, default="A photo containing ")
+
+# prompts
+train_prompt = "Please describe the image."
+eval_prompt = "Please describe the image in great detail. Your response should have at least 100 words."
+eval_pope_prompt = "According to the given image, answer yes or no to the question faithfully: {question}"
+eval_vqa_prompt = "According to the given image, answer the question faithfully: {question}"
+
+minigpt_prompt = "[INST] <Img><ImageHere></Img> {prompt} [/INST]"
+owl_prompt = (
+    "The following is a conversation between a curious human and AI assistant. The assistant gives helpful, "
+    "detailed, and polite answers to the user's questions.\nHuman: <image>\nHuman: {prompt}\nAI: "
+)
+llava_prompt = share4v_prompt = "### human: <image>\n {prompt} \n### gpt:"
 
 # insight
 ## model
@@ -133,40 +147,40 @@ parser.add_argument(
 parser.add_argument(
     "--minigpt_train_cfg", default="configs/minigpt4_train_fp16.yaml", help="path to configuration file."
 )
-parser.add_argument(
-    "--minigpt_infer_prompt",
-    type=str,
-    default="<Img><ImageHere></Img> Please describe the image in no more than 50 words. Make sure to be brief and concise.",
-)
+# parser.add_argument(
+#     "--minigpt_infer_prompt",
+#     type=str,
+#     default="<Img><ImageHere></Img> Please describe the image in no more than 50 words. Make sure to be brief and concise.",
+# )
 # as context should not be counted in instruction, we need to remove prompt template from cfg and add it here
-parser.add_argument(
-    "--minigpt_train_prompt", type=str, default="[INST] <Img><ImageHere></Img> Please describe the image. [/INST]"
-)
-parser.add_argument(
-    "--minigpt_eval_prompt",
-    type=str,
-    default="[INST] <Img><ImageHere></Img> Please describe the image in great detail. Your response should have at least 100 words. [/INST]",
-)
-parser.add_argument(
-    "--minigpt_eval_pope_prompt",
-    type=str,
-    default="[INST] <Img><ImageHere></Img> According to the given image, answer yes or no to the question faithfully: {question} [/INST]",
-)
+# parser.add_argument(
+#     "--minigpt_train_prompt", type=str, default="[INST] <Img><ImageHere></Img> Please describe the image. [/INST]"
+# )
+# parser.add_argument(
+#     "--minigpt_eval_prompt",
+#     type=str,
+#     default="[INST] <Img><ImageHere></Img> Please describe the image in great detail. Your response should have at least 100 words. [/INST]",
+# )
+# parser.add_argument(
+#     "--minigpt_eval_pope_prompt",
+#     type=str,
+#     default="[INST] <Img><ImageHere></Img> According to the given image, answer yes or no to the question faithfully: {question} [/INST]",
+# )
 parser.add_argument("--minigpt_path", type=str, default="checkpoints/minigpt4_llama2_7b/pretrained.pth")
 parser.add_argument("--minigpt_ckpt_load_path", type=str, default="checkpoints/minigpt4_llama2_7b/pretrained.pth")
 parser.add_argument("--minigpt_ckpt_save_path", type=str, default="checkpoints/minigpt4_llama2_7b")
 
 ### instruct-blip
-parser.add_argument("--blip_train_prompt", type=str, default="Please describe the image.")
-parser.add_argument(
-    "--blip_eval_prompt",
-    type=str,
-    default="Please describe the image in great detail. Your response should have at least 100 words.",
-)
+# parser.add_argument("--blip_train_prompt", type=str, default="Please describe the image.")
+# parser.add_argument(
+#     "--blip_eval_prompt",
+#     type=str,
+#     default="Please describe the image in great detail. Your response should have at least 100 words.",
+# )
 # note that this should be modified in the config file, along with vicuna path
-parser.add_argument("--blip_path", type=str, default="checkpoints/blip_vicuna_7b/pretrained.pth")
-parser.add_argument("--blip_ckpt_load_path", type=str, default="checkpoints/blip_vicuna_7b/pretrained.pth")
-parser.add_argument("--blip_ckpt_save_path", type=str, default="checkpoints/blip_vicuna_7b")
+# parser.add_argument("--blip_path", type=str, default="checkpoints/blip_vicuna_7b/pretrained.pth")
+# parser.add_argument("--blip_ckpt_load_path", type=str, default="checkpoints/blip_vicuna_7b/pretrained.pth")
+# parser.add_argument("--blip_ckpt_save_path", type=str, default="checkpoints/blip_vicuna_7b")
 
 ### mplug-owl:
 parser.add_argument("--owl_path", type=str, default="/root/.cache/huggingface/hub/models--MAGAer13--mplug-owl-llama-7b")
@@ -174,45 +188,45 @@ parser.add_argument(
     "--owl_ckpt_load_path", type=str, default="/root/.cache/huggingface/hub/models--MAGAer13--mplug-owl-llama-7b"
 )  # todo tobe checked -> pass
 parser.add_argument("--owl_ckpt_save_path", type=str, default="checkpoints/owl-llama-7b")  # todo: tobe checked -> pass
-parser.add_argument(
-    "--owl_train_prompt",
-    type=str,
-    default="""The following is a conversation between a curious human and AI assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.
-Human: <image>
-Human: Please describe the image.
-AI: """,
-)
-parser.add_argument(
-    "--owl_eval_prompt",
-    type=str,
-    default="""The following is a conversation between a curious human and AI assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.
-Human: <image>
-Human: Please describe the image in great detail. Your response should have at least 100 words.
-AI: """,
-)
-parser.add_argument(
-    "--owl_eval_pope_prompt",
-    type=str,
-    default="""The following is a conversation between a curious human and AI assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.
-Human: <image>
-Human: According to the given image, answer yes or no to the question faithfully: {question}
-AI: """,
-)
+# parser.add_argument(
+#     "--owl_train_prompt",
+#     type=str,
+#     default="""The following is a conversation between a curious human and AI assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.
+# Human: <image>
+# Human: Please describe the image.
+# AI: """,
+# )
+# parser.add_argument(
+#     "--owl_eval_prompt",
+#     type=str,
+#     default="""The following is a conversation between a curious human and AI assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.
+# Human: <image>
+# Human: Please describe the image in great detail. Your response should have at least 100 words.
+# AI: """,
+# )
+# parser.add_argument(
+#     "--owl_eval_pope_prompt",
+#     type=str,
+#     default="""The following is a conversation between a curious human and AI assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.
+# Human: <image>
+# Human: According to the given image, answer yes or no to the question faithfully: {question}
+# AI: """,
+# )
 
 ### llava
-parser.add_argument(
-    "--llava_train_prompt", type=str, default="### human: <image>\n Please describe the image. \n### gpt:"
-)
-parser.add_argument(
-    "--llava_eval_prompt",
-    type=str,
-    default="### human: <image>\n Please describe the image in great detail. Your response should have at least 100 words. \n### gpt:",
-)
-parser.add_argument(
-    "--llava_eval_pope_prompt",
-    type=str,
-    default="### human: <image>\n According to the given image, answer yes or no to the question faithfully: {question} \n### gpt:",
-)
+# parser.add_argument(
+#     "--llava_train_prompt", type=str, default="### human: <image>\n Please describe the image. \n### gpt:"
+# )
+# parser.add_argument(
+#     "--llava_eval_prompt",
+#     type=str,
+#     default="### human: <image>\n Please describe the image in great detail. Your response should have at least 100 words. \n### gpt:",
+# )
+# parser.add_argument(
+#     "--llava_eval_pope_prompt",
+#     type=str,
+#     default="### human: <image>\n According to the given image, answer yes or no to the question faithfully: {question} \n### gpt:",
+# )
 parser.add_argument(
     "--llava_ckpt_load_path",
     type=str,
@@ -231,19 +245,19 @@ parser.add_argument(
 parser.add_argument("--llava_ckpt_save_path", type=str, default="checkpoints/llava_vicuna_7b")
 
 ### share4v
-parser.add_argument(
-    "--share4v_train_prompt", type=str, default="### human: <image>\n Please describe the image. \n### gpt:"
-)
-parser.add_argument(
-    "--share4v_eval_prompt",
-    type=str,
-    default="### human: <image>\n Please describe the image in great detail. Your response should have at least 100 words. \n### gpt:",
-)
-parser.add_argument(
-    "--share4v_eval_pope_prompt",
-    type=str,
-    default="### human: <image>\n According to the given image, answer yes or no to the question faithfully: {question} \n### gpt:",
-)
+# parser.add_argument(
+#     "--share4v_train_prompt", type=str, default="### human: <image>\n Please describe the image. \n### gpt:"
+# )
+# parser.add_argument(
+#     "--share4v_eval_prompt",
+#     type=str,
+#     default="### human: <image>\n Please describe the image in great detail. Your response should have at least 100 words. \n### gpt:",
+# )
+# parser.add_argument(
+#     "--share4v_eval_pope_prompt",
+#     type=str,
+#     default="### human: <image>\n According to the given image, answer yes or no to the question faithfully: {question} \n### gpt:",
+# )
 parser.add_argument(
     "--share4v_ckpt_load_path",
     type=str,
@@ -263,6 +277,9 @@ parser.add_argument("--share4v_ckpt_save_path", type=str, default="checkpoints/s
 
 # eval
 parser.add_argument("--pope_result_path", type=str, default="evaluate/pope/result")
+parser.add_argument("--vqa_result_path", type=str, default="evaluate/vqa/result")
+parser.add_argument("--vqa_question_path", type=str, default="dataset/v2_OpenEnded_mscoco_train2014_questions.json")
+parser.add_argument("--vqa_annotation_path", type=str, default="dataset/v2_mscoco_train2014_annotations.json")
 parser.add_argument("--default_eval_samples", type=int, default=1600)
 parser.add_argument("--generate_length_penalty", type=float, default=-1)
 
@@ -279,6 +296,8 @@ parser.add_argument("--no_first_eval", action="store_true")
 parser.add_argument("--run_name", type=str, default=str(time()))
 
 args = parser.parse_args()
+
+# batch size
 args.infer_bs_pos = args.train_bs_pos * args.infer_bs_multiply
 args.infer_bs_sent = args.train_bs_sent * args.infer_bs_multiply
 args.infer_bs_neg = args.train_bs_neg * args.infer_bs_multiply
@@ -288,7 +307,15 @@ if args.train_bs_total == 0:
 if args.infer_bs_total == 0:
     args.infer_bs_total = args.infer_bs_pos + args.infer_bs_sent + args.infer_bs_neg + args.infer_bs_gold
 
+# dtype
 args.train_dtype = getattr(torch, args.train_dtype_str)
+
+# prompt
+for model_name, prompt_type in product(
+    ["minigpt", "owl", "llava", "share4v"], ["train", "eval", "eval_pope", "eval_vqa"]
+):
+    prompt = globals()[f"{model_name}_prompt"].format(prompt=globals()[f"{prompt_type}_prompt"])
+    setattr(args, f"{model_name}_{prompt_type}_prompt", prompt)
 
 
 # model provided parser

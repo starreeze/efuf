@@ -124,7 +124,7 @@ def save_ckpt(model: torch.nn.Module, step: int):
 
 
 def main():
-    print(args)
+    # print(args)
     os.environ["WANDB_MODE"] = "offline"
     os.environ["http_proxy"] = os.environ["https_proxy"] = args.proxy
     wandb.init(project="lmm_hal", entity=args.wandb_user, name=args.model, config=vars(args), sync_tensorboard=False)

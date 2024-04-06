@@ -3,8 +3,7 @@
 # @Author  : Shangyu.Xing (starreeze@foxmail.com)
 
 from __future__ import annotations
-
-from typing import Any, Callable
+from typing import Any, Callable, Generic, TypeVar
 import torch, numpy
 from torch.utils.data import DataLoader, Dataset
 
@@ -116,3 +115,31 @@ def merge_dict_set(x: dict[Any, set], y: dict[Any, set]) -> dict[Any, set]:
             ret[k] = set()
         ret[k].update(v)
     return ret
+
+
+K = TypeVar("K")
+V = TypeVar("V")
+
+
+class DirectDict(dict[K, V], Generic[K, V]):
+    def __getattr__(self, name: str) -> V:
+        if name in dir(self):  # Check if it's a method/attribute of DirectDict or dict
+            # Return the method/attribute from the class itself
+            return object.__getattribute__(self, name)
+        try:
+            return self[name]  # type: ignore
+        except KeyError:
+            raise AttributeError(f"'DirectDict' object has no attribute '{name}'")
+
+    def __setattr__(self, name: str, value: V) -> None:
+        if name in dir(dict) or name in self.__dict__:
+            raise AttributeError(f"Setting the method/attribute '{name}' via attribute-style is not allowed")
+        self[name] = value  # type: ignore
+
+    def __delattr__(self, name: str) -> None:
+        if name in dir(dict) or name in self.__dict__:
+            raise AttributeError(f"Deleting the method/attribute '{name}' via attribute-style is not allowed")
+        try:
+            del self[name]  # type: ignore
+        except KeyError:
+            raise AttributeError(f"'DirectDict' object has no attribute '{name}'")
