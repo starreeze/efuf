@@ -4,6 +4,7 @@
 "specific model behavior (model loading, data processing, etc.)"
 
 from __future__ import annotations
+from itertools import product
 import os, re, torch, transformers
 from functools import partial
 from torch.nn import CrossEntropyLoss
@@ -321,45 +322,54 @@ class OWl:
             sentence = self.tokenizer.decode(res.tolist()[0], skip_special_tokens=True)
             answers.append(sentence)
         return answers
+
+
 class OWLlrv(OWl):
     def load(
         self, ckpt: str, device="cuda", train=False, model_args: list[str] = []
     ) -> tuple[torch.nn.Module, torch.nn.Module]:
         from Owl.pipeline.interface import get_model
         from Owl.mplug_owl.modeling_mplug_owl import MplugOwlForConditionalGeneration
-  
-        from Owl.mplug_owl.processing_mplug_owl import MplugOwlImageProcessor, MplugOwlProcessor
-        from transformers import AutoTokenizer
-        from peft import LoraConfig, get_peft_model, PeftModel
-   
-        print(f"begin load:")
+
+        # from Owl.mplug_owl.processing_mplug_owl import MplugOwlImageProcessor, MplugOwlProcessor
+        # from transformers import AutoTokenizer
+        from peft import LoraConfig, get_peft_model, PeftModel  # type: ignore
+
         model: MplugOwlForConditionalGeneration
         model, tokenizer, processor = get_model(args.owllrv_path, use_bf16=(args.train_dtype_str == "bfloat16"))  # type: ignore
         print(f"loaded from {args.owllrv_path}")
-        
-        peft_config = LoraConfig(target_modules=r'.*language_model.*\.(q_proj|v_proj)', inference_mode=False, r=8,lora_alpha=32, lora_dropout=0.05)
-        model = get_peft_model(model, peft_config)
-    
+
+        peft_config = LoraConfig(
+            target_modules=r".*language_model.*\.(q_proj|v_proj)",
+            inference_mode=False,
+            r=8,
+            lora_alpha=32,
+            lora_dropout=0.05,
+        )
+        model = get_peft_model(model, peft_config)  # type: ignore
+
         lora_path = args.owllrv_lora_path
         prefix_state_dict = torch.load(lora_path, map_location=device)
- 
-        unexpected = ["base_model.model.language_model.model.layers.0.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.0.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.1.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.1.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.2.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.2.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.3.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.3.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.4.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.4.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.5.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.5.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.6.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.6.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.7.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.7.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.8.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.8.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.9.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.9.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.10.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.10.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.11.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.11.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.12.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.12.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.13.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.13.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.14.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.14.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.15.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.15.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.16.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.16.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.17.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.17.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.18.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.18.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.19.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.19.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.20.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.20.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.21.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.21.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.22.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.22.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.23.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.23.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.24.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.24.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.25.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.25.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.26.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.26.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.27.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.27.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.28.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.28.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.29.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.29.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.30.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.30.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.31.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.31.self_attn.v_proj.weight"]
 
+        unexpected = [
+            f"base_model.model.language_model.model.layers.{i}.self_attn.{n}_proj.weight"
+            for i, n in product(range(32), ("q", "v"))
+        ]
         for k in unexpected:
-            prefix_state_dict[k[:-len('weight')] + 'base_layer.weight'] = prefix_state_dict[k]
+            prefix_state_dict[k[: -len("weight")] + "base_layer.weight"] = prefix_state_dict[k]
             del prefix_state_dict[k]
-              
+
         model.load_state_dict(prefix_state_dict)
         require_grad_para = []
-        print(f"loaded from lora_path, type={type(model)},\n\nmodel={model}")
+        # print(f"loaded from lora_path, type={type(model)},\n\nmodel={model}")
         for name, p in model.named_parameters():
             if p.requires_grad:
                 require_grad_para.append(name)
-        
-        print(f"para_require={require_grad_para}, len={len(require_grad_para)}")
-        
+
+        # print(f"para_require={require_grad_para}, len={len(require_grad_para)}")
+
         load_ckpt(model, ckpt, device)
-        print(f"load_ckpt from {args.owllrv_ckpt_load_path}")  
+        print(f"load_ckpt from {args.owllrv_ckpt_load_path}")
         model.to(device)
         if train:
             model.requires_grad_(True)
@@ -375,7 +385,8 @@ class OWLlrv(OWl):
         self.processor = processor
         self.model = model
         self.tokenizer = tokenizer
-        return model, lambda image: processor(text=None, images=[image], return_tensors="pt")["pixel_values"][0] 
+        return model, lambda image: processor(text=None, images=[image], return_tensors="pt")["pixel_values"][0]  # type: ignore
+
 
 class LlavaModel:
     # No modification made to llava 1.5
@@ -581,7 +592,7 @@ class LlavaModel:
             input_ids: torch.Tensor = self.tokenize_image(text).cuda().unsqueeze(0)  # type: ignore
             with torch.inference_mode():
                 output_ids = model.generate(
-                    input_ids=input_ids, #改成关键字参数，否则llava-rlhf会出现bug
+                    input_ids=input_ids,  # 改成关键字参数，否则llava-rlhf会出现bug
                     images=image.unsqueeze(0).half().cuda(),
                     temperature=1,
                     top_p=0.9,
@@ -607,6 +618,8 @@ class LlavaModel:
                 samples = [sample for x in inputs for sample in x[k]]
                 ret[k] = torch.nn.utils.rnn.pad_sequence(samples, batch_first=True, padding_value=pad_value[k])
         return ret
+
+
 class Llavarlhf(LlavaModel):
     def load(self, ckpt, device="cuda", train=False, llava_args=[]):
         from llava.model.language_model.llava_llama import LlavaLlamaForCausalLM as VLM
@@ -631,7 +644,7 @@ class Llavarlhf(LlavaModel):
             padding_side="right",
             use_fast=False,
         )
- 
+
         tokenizer.pad_token = tokenizer.unk_token
 
         model.get_model().initialize_vision_modules(model_args=model_args, fsdp=training_args.fsdp)
@@ -659,9 +672,7 @@ class Llavarlhf(LlavaModel):
         vis_processor = model.get_model().get_vision_tower().image_processor  # type: ignore
         self.tokenize_image = partial(tokenizer_image_token, tokenizer=self.tokenizer, return_tensors="pt")
 
-
         load_ckpt(model, ckpt, device)
-
 
         model.train(train)
 
@@ -676,12 +687,13 @@ class Llavarlhf(LlavaModel):
             module.eval()
             for param in module.parameters():
                 param.requires_grad = False
-        if not train:
-            model.requires_grad_(False)
-        for name, p in model.named_parameters():
-            if p.requires_grad:
-                print(f"name={name}, p.requires_grad={p.requires_grad}")
+        # if not train:
+        #     model.requires_grad_(False)
+        # for name, p in model.named_parameters():
+        #     if p.requires_grad:
+        #         print(f"name={name}, p.requires_grad={p.requires_grad}")
         return model, lambda x: vis_processor.preprocess(x, return_tensors="pt")["pixel_values"][0]
+
 
 llava_model = LlavaModel()
 llavarlhf_model = Llavarlhf()
@@ -695,7 +707,6 @@ model_loaders = {
     "owl": owl_model.load,
     "owllrv": owllrv_model.load,
     "llavarlhf": llavarlhf_model.load,
-
 }
 data_maps = {
     "minigpt": minigpt_data_map,

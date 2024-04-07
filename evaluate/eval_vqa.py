@@ -24,7 +24,7 @@ model_dtype = {"llava": torch.bfloat16, "share4v": torch.bfloat16}
 
 
 class VQAData(Dataset):
-    def __init__(self, processor, start, end):
+    def __init__(self, processor, start=0, end=int(1e9)):
         super().__init__()
         self.processor = processor
         with open(args.vqa_question_path, "r") as f:
@@ -47,9 +47,8 @@ class VQAData(Dataset):
 
     def save(self):
         path = os.path.join(args.vqa_result_path, "data_eval.json")
-        if not os.path.exists(path):
-            with open(path, "w") as f:
-                json.dump(self.data, f)
+        with open(path, "w") as f:
+            json.dump(self.data, f)
         return self
 
 
@@ -65,9 +64,9 @@ def inference():
         model.to(model_dtype[args.model])
     except KeyError:
         pass
-    train_data = VQATrainData(vis_processor, 0, args.default_eval_samples)
+    train_data = VQATrainData(vis_processor, start=args.default_eval_samples, end=args.end_pos)
     train_loader = DataLoader(train_data, args.train_bs_total, True, collate_fn=sample_collators[args.model])
-    eval_data = VQAData(vis_processor, args.default_eval_samples, 2 * args.default_eval_samples).save()
+    eval_data = VQAData(vis_processor, end=args.default_eval_samples).save()
     eval_loader = DataLoader(eval_data, args.infer_bs_total, False)
 
     # we train both the models for fair comparison, making them better respond to short-answer vqa questions

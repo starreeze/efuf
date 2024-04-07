@@ -40,7 +40,7 @@ parser.add_argument("--clip_prompt", type=str, default="A photo containing ")
 train_prompt = "Please describe the image."
 eval_prompt = "Please describe the image in great detail. Your response should have at least 100 words."
 eval_pope_prompt = "According to the given image, answer yes or no to the question faithfully: {question}"
-eval_vqa_prompt = "According to the given image, answer the question faithfully: {question}"
+eval_vqa_prompt = "{question}\nAnswer the question using a single word or phrase."
 
 minigpt_prompt = "[INST] <Img><ImageHere></Img> {prompt} [/INST]"
 owl_prompt = (
@@ -148,25 +148,6 @@ parser.add_argument(
 parser.add_argument(
     "--minigpt_train_cfg", default="configs/minigpt4_train_fp16.yaml", help="path to configuration file."
 )
-# parser.add_argument(
-#     "--minigpt_infer_prompt",
-#     type=str,
-#     default="<Img><ImageHere></Img> Please describe the image in no more than 50 words. Make sure to be brief and concise.",
-# )
-# as context should not be counted in instruction, we need to remove prompt template from cfg and add it here
-# parser.add_argument(
-#     "--minigpt_train_prompt", type=str, default="[INST] <Img><ImageHere></Img> Please describe the image. [/INST]"
-# )
-# parser.add_argument(
-#     "--minigpt_eval_prompt",
-#     type=str,
-#     default="[INST] <Img><ImageHere></Img> Please describe the image in great detail. Your response should have at least 100 words. [/INST]",
-# )
-# parser.add_argument(
-#     "--minigpt_eval_pope_prompt",
-#     type=str,
-#     default="[INST] <Img><ImageHere></Img> According to the given image, answer yes or no to the question faithfully: {question} [/INST]",
-# )
 parser.add_argument("--minigpt_path", type=str, default="checkpoints/minigpt4_llama2_7b/pretrained.pth")
 parser.add_argument("--minigpt_ckpt_load_path", type=str, default="checkpoints/minigpt4_llama2_7b/pretrained.pth")
 parser.add_argument("--minigpt_ckpt_save_path", type=str, default="checkpoints/minigpt4_llama2_7b")
@@ -189,50 +170,22 @@ parser.add_argument(
     "--owl_ckpt_load_path", type=str, default="/root/.cache/huggingface/hub/models--MAGAer13--mplug-owl-llama-7b"
 )  # todo tobe checked -> pass
 parser.add_argument("--owl_ckpt_save_path", type=str, default="checkpoints/owl-llama-7b")  # todo: tobe checked -> pass
+
 ### owllrv:
-parser.add_argument("--owllrv_path", type=str, default="/root/.cache/huggingface/hub/models--MAGAer13--mplug-owl-llama-7b-ft/snapshots/8b08efd90767fda988d69892e02eb4b8c642fafb")
-parser.add_argument("--owllrv_ckpt_load_path", type=str, default="/root/.cache/huggingface/hub/models--MAGAer13--mplug-owl-llama-7b-ft/snapshots/8b08efd90767fda988d69892e02eb4b8c642fafb")
-parser.add_argument("--owllrv_ckpt_save_path", type=str, default="checkpoints/owl-rvl")
+parser.add_argument(
+    "--owllrv_path",
+    type=str,
+    default="/root/.cache/huggingface/hub/models--MAGAer13--mplug-owl-llama-7b-ft/snapshots/8b08efd90767fda988d69892e02eb4b8c642fafb",
+)
+parser.add_argument(
+    "--owllrv_ckpt_load_path",
+    type=str,
+    default="/root/.cache/huggingface/hub/models--MAGAer13--mplug-owl-llama-7b-ft/snapshots/8b08efd90767fda988d69892e02eb4b8c642fafb",
+)
+parser.add_argument("--owllrv_ckpt_save_path", type=str, default="checkpoints/owl-lrv")
 parser.add_argument("--owllrv_lora_path", type=str, default="checkpoints/owl-lora-model/pytorch_model.bin")
-# parser.add_argument(
-#     "--owl_train_prompt",
-#     type=str,
-#     default="""The following is a conversation between a curious human and AI assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.
-# Human: <image>
-# Human: Please describe the image.
-# AI: """,
-# )
-# parser.add_argument(
-#     "--owl_eval_prompt",
-#     type=str,
-#     default="""The following is a conversation between a curious human and AI assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.
-# Human: <image>
-# Human: Please describe the image in great detail. Your response should have at least 100 words.
-# AI: """,
-# )
-# parser.add_argument(
-#     "--owl_eval_pope_prompt",
-#     type=str,
-#     default="""The following is a conversation between a curious human and AI assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.
-# Human: <image>
-# Human: According to the given image, answer yes or no to the question faithfully: {question}
-# AI: """,
-# )
 
 ### llava
-# parser.add_argument(
-#     "--llava_train_prompt", type=str, default="### human: <image>\n Please describe the image. \n### gpt:"
-# )
-# parser.add_argument(
-#     "--llava_eval_prompt",
-#     type=str,
-#     default="### human: <image>\n Please describe the image in great detail. Your response should have at least 100 words. \n### gpt:",
-# )
-# parser.add_argument(
-#     "--llava_eval_pope_prompt",
-#     type=str,
-#     default="### human: <image>\n According to the given image, answer yes or no to the question faithfully: {question} \n### gpt:",
-# )
 parser.add_argument(
     "--llava_ckpt_load_path",
     type=str,
@@ -265,26 +218,10 @@ parser.add_argument(
     "--llavarlhf_vit_path",
     type=str,
     default="/root/.cache/huggingface/hub/models--openai--clip-vit-large-patch14/snapshots/32bd64288804d66eefd0ccbe215aa642df71cc41",
-) 
-parser.add_argument(
-    "--llavarlhf_ckpt_save_path",
-    type=str,
-    default="checkpoints/llava_rlhf_7b"
 )
+parser.add_argument("--llavarlhf_ckpt_save_path", type=str, default="checkpoints/llava_rlhf_7b")
+
 ### share4v
-# parser.add_argument(
-#     "--share4v_train_prompt", type=str, default="### human: <image>\n Please describe the image. \n### gpt:"
-# )
-# parser.add_argument(
-#     "--share4v_eval_prompt",
-#     type=str,
-#     default="### human: <image>\n Please describe the image in great detail. Your response should have at least 100 words. \n### gpt:",
-# )
-# parser.add_argument(
-#     "--share4v_eval_pope_prompt",
-#     type=str,
-#     default="### human: <image>\n According to the given image, answer yes or no to the question faithfully: {question} \n### gpt:",
-# )
 parser.add_argument(
     "--share4v_ckpt_load_path",
     type=str,
@@ -366,5 +303,3 @@ def minigpt4_finetune_parser():
         "change to --cfg-options instead.",
     )
     return parser
-
-# nohup my_process > output.log 2>&1 &
