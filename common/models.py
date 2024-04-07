@@ -321,7 +321,7 @@ class OWl:
             sentence = self.tokenizer.decode(res.tolist()[0], skip_special_tokens=True)
             answers.append(sentence)
         return answers
-class OWLrlv(OWl):
+class OWLlrv(OWl):
     def load(
         self, ckpt: str, device="cuda", train=False, model_args: list[str] = []
     ) -> tuple[torch.nn.Module, torch.nn.Module]:
@@ -334,13 +334,13 @@ class OWLrlv(OWl):
    
         print(f"begin load:")
         model: MplugOwlForConditionalGeneration
-        model, tokenizer, processor = get_model(args.owlrlv_path, use_bf16=(args.train_dtype_str == "bfloat16"))  # type: ignore
-        print(f"loaded from {args.owlrlv_path}")
+        model, tokenizer, processor = get_model(args.owllrv_path, use_bf16=(args.train_dtype_str == "bfloat16"))  # type: ignore
+        print(f"loaded from {args.owllrv_path}")
         
         peft_config = LoraConfig(target_modules=r'.*language_model.*\.(q_proj|v_proj)', inference_mode=False, r=8,lora_alpha=32, lora_dropout=0.05)
         model = get_peft_model(model, peft_config)
     
-        lora_path = args.owlrlv_lora_path
+        lora_path = args.owllrv_lora_path
         prefix_state_dict = torch.load(lora_path, map_location=device)
  
         unexpected = ["base_model.model.language_model.model.layers.0.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.0.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.1.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.1.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.2.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.2.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.3.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.3.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.4.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.4.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.5.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.5.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.6.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.6.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.7.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.7.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.8.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.8.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.9.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.9.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.10.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.10.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.11.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.11.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.12.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.12.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.13.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.13.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.14.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.14.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.15.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.15.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.16.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.16.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.17.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.17.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.18.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.18.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.19.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.19.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.20.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.20.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.21.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.21.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.22.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.22.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.23.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.23.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.24.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.24.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.25.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.25.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.26.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.26.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.27.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.27.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.28.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.28.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.29.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.29.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.30.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.30.self_attn.v_proj.weight", "base_model.model.language_model.model.layers.31.self_attn.q_proj.weight", "base_model.model.language_model.model.layers.31.self_attn.v_proj.weight"]
@@ -359,7 +359,7 @@ class OWLrlv(OWl):
         print(f"para_require={require_grad_para}, len={len(require_grad_para)}")
         
         load_ckpt(model, ckpt, device)
-        print(f"load_ckpt from {args.owlrlv_ckpt_load_path}")  
+        print(f"load_ckpt from {args.owllrv_ckpt_load_path}")  
         model.to(device)
         if train:
             model.requires_grad_(True)
@@ -686,14 +686,14 @@ class Llavarlhf(LlavaModel):
 llava_model = LlavaModel()
 llavarlhf_model = Llavarlhf()
 owl_model = OWl()
-owlrlv_model = OWLrlv()
+owllrv_model = OWLlrv()
 model_loaders = {
     "minigpt": load_minigpt,
     "blip": load_blip,
     "llava": llava_model.load,
     "share4v": llava_model.load,
     "owl": owl_model.load,
-    "owlrlv": owlrlv_model.load,
+    "owllrv": owllrv_model.load,
     "llavarlhf": llavarlhf_model.load,
 
 }
@@ -703,7 +703,7 @@ data_maps = {
     "llava": llava_model.data_map,
     "share4v": llava_model.data_map,
     "owl": owl_model.data_map,
-    "owlrlv": owlrlv_model.data_map,
+    "owllrv": owllrv_model.data_map,
     "llavarlhf": llavarlhf_model.data_map,
 }
 sample_collators = {
@@ -712,7 +712,7 @@ sample_collators = {
     "llava": llava_model.collator,
     "share4v": llava_model.collator,
     "owl": owl_model.collator,
-    "owlrlv": owlrlv_model.collator,
+    "owllrv": owllrv_model.collator,
     "llavarlhf": llavarlhf_model.collator,
 }
 batch_collators = {
@@ -721,7 +721,7 @@ batch_collators = {
     "llava": llava_model.pad_batch_collator,
     "share4v": llava_model.pad_batch_collator,
     "owl": merge_batch_collator,
-    "owlrlv": merge_batch_collator,
+    "owllrv": merge_batch_collator,
     "llavarlhf": llavarlhf_model.pad_batch_collator,
 }
 generators = {
@@ -730,7 +730,7 @@ generators = {
     "llava": llava_model.generate,
     "share4v": llava_model.generate,
     "owl": owl_model.generate,
-    "owlrlv": owlrlv_model.generate,
+    "owllrv": owllrv_model.generate,
     "llavarlhf": llavarlhf_model.generate,
 }
 model_forward = {
@@ -739,7 +739,7 @@ model_forward = {
     "llava": llava_model.forward,
     "share4v": llava_model.forward,
     "owl": owl_model.forward,
-    "owlrlv": owlrlv_model.forward,
+    "owllrv": owllrv_model.forward,
     "llavarlhf": llavarlhf_model.forward,
 }
 
