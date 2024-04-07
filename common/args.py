@@ -47,8 +47,9 @@ owl_prompt = (
     "The following is a conversation between a curious human and AI assistant. The assistant gives helpful, "
     "detailed, and polite answers to the user's questions.\nHuman: <image>\nHuman: {prompt}\nAI: "
 )
+owlrlv_prompt = owl_prompt
 llava_prompt = share4v_prompt = "### human: <image>\n {prompt} \n### gpt:"
-
+llavarlhf_prompt = llava_prompt
 # insight
 ## model
 ### llm for object extraction
@@ -188,6 +189,11 @@ parser.add_argument(
     "--owl_ckpt_load_path", type=str, default="/root/.cache/huggingface/hub/models--MAGAer13--mplug-owl-llama-7b"
 )  # todo tobe checked -> pass
 parser.add_argument("--owl_ckpt_save_path", type=str, default="checkpoints/owl-llama-7b")  # todo: tobe checked -> pass
+### owlrlv:
+parser.add_argument("--owlrlv_path", type=str, default="/root/.cache/huggingface/hub/models--MAGAer13--mplug-owl-llama-7b-ft/snapshots/8b08efd90767fda988d69892e02eb4b8c642fafb")
+parser.add_argument("--owlrlv_ckpt_load_path", type=str, default="checkpoints/owl-rvl-4-5/1712318357.564891")
+parser.add_argument("--owlrlv_ckpt_save_path", type=str, default="checkpoints/owl-rvl-4-7-04")
+parser.add_argument("--owlrlv_lora_path", type=str, default="checkpoints/owl-lora-model/pytorch_model.bin")
 # parser.add_argument(
 #     "--owl_train_prompt",
 #     type=str,
@@ -244,6 +250,27 @@ parser.add_argument(
 )
 parser.add_argument("--llava_ckpt_save_path", type=str, default="checkpoints/llava_vicuna_7b")
 
+### llavarlhf:
+parser.add_argument(
+    "--llavarlhf_ckpt_load_path",
+    type=str,
+    default="checkpoints/llava_rlhf_7b4-2/1712042971.2852998",
+)
+parser.add_argument(
+    "--llavarlhf_path",
+    type=str,
+    default="checkpoints/llava_rlhf_merged4-2",
+)
+parser.add_argument(
+    "--llavarlhf_vit_path",
+    type=str,
+    default="/root/.cache/huggingface/hub/models--openai--clip-vit-large-patch14/snapshots/32bd64288804d66eefd0ccbe215aa642df71cc41",
+) 
+parser.add_argument(
+    "--llavarlhf_ckpt_save_path",
+    type=str,
+    default="/workspace/hal/checkpoints/llava_rlhf_7b4-6"
+)
 ### share4v
 # parser.add_argument(
 #     "--share4v_train_prompt", type=str, default="### human: <image>\n Please describe the image. \n### gpt:"
@@ -312,7 +339,7 @@ args.train_dtype = getattr(torch, args.train_dtype_str)
 
 # prompt
 for model_name, prompt_type in product(
-    ["minigpt", "owl", "llava", "share4v"], ["train", "eval", "eval_pope", "eval_vqa"]
+    ["minigpt", "owl", "owlrlv", "llava", "llavarlhf", "share4v"], ["train", "eval", "eval_pope", "eval_vqa"]
 ):
     prompt = globals()[f"{model_name}_prompt"].format(prompt=globals()[f"{prompt_type}_prompt"])
     setattr(args, f"{model_name}_{prompt_type}_prompt", prompt)
@@ -339,3 +366,5 @@ def minigpt4_finetune_parser():
         "change to --cfg-options instead.",
     )
     return parser
+
+# nohup my_process > output.log 2>&1 &
