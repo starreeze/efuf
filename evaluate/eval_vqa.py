@@ -20,7 +20,7 @@ from evaluate.vqa.evaluate import VQAEval
 
 basename = getattr(args, f"{args.model}_ckpt_load_path").split("/")[-1][:10]
 pred_path = os.path.join(args.vqa_result_path, f"{args.run_name}_{args.model}_{basename}.json")
-model_dtype = {"llava": torch.bfloat16, "share4v": torch.bfloat16}
+model_dtype = {"llava": torch.bfloat16, "llavarlhf": torch.bfloat16, "share4v": torch.bfloat16}
 
 
 class VQAData(Dataset):
@@ -58,18 +58,10 @@ class VQATrainData(VQAData):
         return data_maps[args.model](dict(image=image, input=question, output=answer, score=0.0), add_end_sym=True)
 
 
-def inference():
-    model, vis_processor = model_loaders[args.model](getattr(args, f"{args.model}_ckpt_load_path"))
-    try:
-        model.to(model_dtype[args.model])
-    except KeyError:
-        pass
-    train_data = VQATrainData(vis_processor, start=args.default_eval_samples, end=args.end_pos)
-    train_loader = DataLoader(train_data, args.train_bs_total, True, collate_fn=sample_collators[args.model])
-    eval_data = VQAData(vis_processor, end=args.default_eval_samples).save()
-    eval_loader = DataLoader(eval_data, args.infer_bs_total, False)
-
+def train(model, vis_processor, start, end):
     # we train both the models for fair comparison, making them better respond to short-answer vqa questions
+    train_data = VQATrainData(vis_processor, start, end)
+    train_loader = DataLoader(train_data, args.train_bs_total, True, collate_fn=sample_collators[args.model])
     optim = AdamW(model.parameters(), lr=args.train_lr, weight_decay=args.train_wd)
     for batch in tqdm(train_loader):
         optim.zero_grad()
@@ -80,6 +72,10 @@ def inference():
         loss.backward()
         optim.step()
 
+
+def inference(model, vis_processor, start, end):
+    eval_data = VQAData(vis_processor, start, end).save()
+    eval_loader = DataLoader(eval_data, args.infer_bs_total, False)
     model.eval()
     model.to(torch.float16)
     with torch.no_grad():
@@ -95,8 +91,15 @@ def inference():
 
 
 def eval():
+    model, vis_processor = model_loaders[args.model](getattr(args, f"{args.model}_ckpt_load_path"))
+    try:
+        model.to(model_dtype[args.model])
+    except KeyError:
+        pass
     # if not os.path.exists(pred_path):
-    inference()
+    if not "skip_train" in args.run_name:
+        train(model, vis_processor, start=args.default_eval_samples, end=args.end_pos)
+    inference(model, vis_processor, start=0, end=args.default_eval_samples)
     path = os.path.join(args.vqa_result_path, "data_eval.json")
     vqa = VQA(path, path)
     vqa_result = vqa.loadRes(pred_path, path)

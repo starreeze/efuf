@@ -37,19 +37,21 @@ parser.add_argument("--subsentence_splitter_set", type=str, default=",.;!?:")
 parser.add_argument("--clip_prompt", type=str, default="A photo containing ")
 
 # prompts
-train_prompt = "Please describe the image."
-eval_prompt = "Please describe the image in great detail. Your response should have at least 100 words."
-eval_pope_prompt = "According to the given image, answer yes or no to the question faithfully: {question}"
-eval_vqa_prompt = "{question}\nAnswer the question using a single word or phrase."
+task_prompts = argparse.Namespace()
+task_prompts.train = "Please describe the image."
+task_prompts.eval = "Please describe the image in great detail. Your response should have at least 100 words."
+task_prompts.eval_pope = "According to the given image, answer yes or no to the question faithfully: {question}"
+task_prompts.eval_vqa = "{question}\nAnswer the question using a single word or phrase."
+task_prompts.eval_mme = "{question}"
 
-minigpt_prompt = "[INST] <Img><ImageHere></Img> {prompt} [/INST]"
-owl_prompt = (
+model_prompts = argparse.Namespace()
+model_prompts.minigpt = "[INST] <Img><ImageHere></Img> {prompt} [/INST]"
+model_prompts.owllrv = model_prompts.owl = (
     "The following is a conversation between a curious human and AI assistant. The assistant gives helpful, "
     "detailed, and polite answers to the user's questions.\nHuman: <image>\nHuman: {prompt}\nAI: "
 )
-owllrv_prompt = owl_prompt
-llava_prompt = share4v_prompt = "### human: <image>\n {prompt} \n### gpt:"
-llavarlhf_prompt = llava_prompt
+model_prompts.llava = model_prompts.llavarlhf = model_prompts.share4v = "### human: <image>\n {prompt} \n### gpt:"
+
 # insight
 ## model
 ### llm for object extraction
@@ -244,6 +246,9 @@ parser.add_argument("--pope_result_path", type=str, default="evaluate/pope/resul
 parser.add_argument("--vqa_result_path", type=str, default="evaluate/vqa/result")
 parser.add_argument("--vqa_question_path", type=str, default="dataset/v2_OpenEnded_mscoco_train2014_questions.json")
 parser.add_argument("--vqa_annotation_path", type=str, default="dataset/v2_mscoco_train2014_annotations.json")
+parser.add_argument("--mme_result_path", type=str, default="evaluate/mme/result")
+parser.add_argument("--mme_text_path", type=str, default="dataset/mme_text")
+parser.add_argument("--mme_image_path", type=str, default="dataset/mme_images")
 parser.add_argument("--default_eval_samples", type=int, default=1600)
 parser.add_argument("--generate_length_penalty", type=float, default=-1)
 
@@ -275,11 +280,9 @@ if args.infer_bs_total == 0:
 args.train_dtype = getattr(torch, args.train_dtype_str)
 
 # prompt
-for model_name, prompt_type in product(
-    ["minigpt", "owl", "owllrv", "llava", "llavarlhf", "share4v"], ["train", "eval", "eval_pope", "eval_vqa"]
-):
-    prompt = globals()[f"{model_name}_prompt"].format(prompt=globals()[f"{prompt_type}_prompt"])
-    setattr(args, f"{model_name}_{prompt_type}_prompt", prompt)
+for model, task in product(model_prompts._get_kwargs(), task_prompts._get_kwargs()):
+    prompt = model[1].format(prompt=task[1])
+    setattr(args, f"{model[0]}_{task[0]}_prompt", prompt)
 
 
 # model provided parser
