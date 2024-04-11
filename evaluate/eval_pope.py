@@ -107,11 +107,12 @@ def eval(input_filename):
                 results.append(json.dumps({"question": q, "answer": ans}))
     with open(pred_path, "w") as f:
         f.write("\n".join(results))
-    print(
-        "Inference done. Please run\n"
-        f"python evaluate/pope/evaluate.py --label {os.path.join(args.pope_result_path, eval_filename)} --pred {pred_path}\n"
-        "to continue"
+    eval_cmd = (
+        "python evaluate/pope/evaluate.py --label "
+        f"{os.path.join(args.pope_result_path, eval_filename)} --pred {pred_path}"
     )
+    print(f"Inference done. Running evaluation:\n{eval_cmd}")
+    os.system(eval_cmd)
 
 
 def main():

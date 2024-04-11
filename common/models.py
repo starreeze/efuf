@@ -545,7 +545,7 @@ class LlavaModel:
 
     def forward(self, model, samples, _):
         embed_image = model.prepare_inputs_labels_for_multimodal
-        if args.model == "llava" or "llavarlhf":
+        if args.model in ["llava", "llavarlhf"]:
             input_ids, _, attention_mask, past_key_values, inputs_embeds, labels = embed_image(
                 samples["input_ids"], None, samples["attention_mask"], None, samples["labels"], samples["image"]
             )
