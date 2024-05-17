@@ -5,4 +5,6 @@ tmp.txt
 *.png
 finetune/sent_stat.py
 *.bak
-auto_pope.py
+lavis
+insight/search.py
+common/gpt_free.py
