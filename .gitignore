@@ -2,7 +2,6 @@ dataset/data
 __pycache__
 checkpoint*
 tmp.txt
-*.png
 finetune/sent_stat.py
 *.bak
 lavis
