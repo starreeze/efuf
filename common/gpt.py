@@ -1,6 +1,6 @@
 import openai
 
-openai.api_key = "sk-47lztbvTmb43q1lVanVebwcFtG9R3nGYb1eeZUFXaci4XEe0"
+openai.api_key = "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 proxy = "http://127.0.0.1:7890"
 
 
