@@ -81,7 +81,14 @@ def blip_data_map(inputs: dict, add_end_sym=None) -> dict:
 
 def minigpt_generate(model, texts, images):
     kwargs = {"length_penalty": args.generate_length_penalty} if args.generate_length_penalty != -1 else {}
-    return model.generate(images, texts, max_new_tokens=args.max_new_tokens, num_beams=5, **kwargs)
+    return model.generate(
+        images,
+        texts,
+        max_new_tokens=args.max_new_tokens,
+        num_beams=args.generate_num_beams,
+        temperature=args.generate_temperature,
+        **kwargs,
+    )
 
 
 def blip_generate(model, texts, images):
@@ -91,8 +98,9 @@ def blip_generate(model, texts, images):
         res = model.generate(
             {"prompt": [text], "image": image.unsqueeze(0)},
             max_length=args.max_new_tokens,
-            temperature=0.9,
+            temperature=args.generate_temperature,
             use_nucleus_sampling=True,
+            num_beams=args.generate_num_beams,
             **kwargs,
         )
         results.extend(res)
@@ -318,7 +326,13 @@ class OWl:
             inputs = {k: v.to(model.device) for k, v in inputs.items()}
             kwargs = {"length_penalty": args.generate_length_penalty} if args.generate_length_penalty != -1 else {}
             with torch.no_grad():
-                res = model.generate(**(inputs | kwargs), max_length=512, top_p=0.9, temperature=1, num_beams=5)
+                res = model.generate(
+                    **(inputs | kwargs),
+                    max_length=512,
+                    top_p=0.9,
+                    temperature=args.generate_temperature,
+                    num_beams=args.generate_num_beams,
+                )
             sentence = self.tokenizer.decode(res.tolist()[0], skip_special_tokens=True)
             answers.append(sentence)
         return answers
@@ -441,14 +455,14 @@ class LlavaModel:
         mm_projector_lr: Optional[float] = None
         group_by_modality_length: bool = field(default=True)
 
-    def load(self, ckpt, device="cuda", train=False, llava_args=[]):
+    def load(self, ckpt, device="cuda", train=False, model_args=[]):
         if args.model == "llava":
             from llava.model.language_model.llava_llama import LlavaLlamaForCausalLM as VLM
-            from llava.mm_utils import tokenizer_image_token
+            from llava.mm_utils import tokenizer_image_token, process_images
             from llava.constants import IGNORE_INDEX
         elif args.model == "share4v":
             from share4v.model.language_model.share4v_llama import Share4VLlamaForCausalLM as VLM
-            from share4v.mm_utils import tokenizer_image_token
+            from share4v.mm_utils import tokenizer_image_token, process_images
             from share4v.constants import IGNORE_INDEX
         else:
             raise NotImplementedError()
@@ -592,18 +606,19 @@ class LlavaModel:
             input_ids: torch.Tensor = self.tokenize_image(text).cuda().unsqueeze(0)  # type: ignore
             with torch.inference_mode():
                 output_ids = model.generate(
-                    input_ids=input_ids,  # 改成关键字参数，否则llava-rlhf会出现bug
+                    input_ids=input_ids,
                     images=image.unsqueeze(0).half().cuda(),
-                    temperature=1,
+                    temperature=args.generate_temperature,
                     top_p=0.9,
-                    num_beams=5,
+                    num_beams=args.generate_num_beams,
                     # no_repeat_ngram_size=3,
                     max_new_tokens=args.max_new_tokens,
                     **kwargs,
                 )
             result = self.tokenizer.batch_decode(output_ids[:, input_ids.shape[1] :], skip_special_tokens=True)[0]
             # as the prompt is in the format of ### human/gpt, we need to truncate the generation to the next ###
-            results.append(result.replace("### gpt: ", "").split("###")[0])
+            # results.append(result.replace("### gpt: ", "").split("###")[0])
+            results.append(result)
         return results
 
     def pad_batch_collator(self, *inputs: dict):

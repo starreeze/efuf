@@ -42,6 +42,7 @@ task_prompts.train = "Please describe the image."
 task_prompts.eval = "Please describe the image in great detail. Your response should have at least 100 words."
 task_prompts.eval_pope = "According to the given image, answer yes or no to the question faithfully: {question}"
 task_prompts.eval_vqa = "{question}\nAnswer the question using a single word or phrase."
+task_prompts.eval_sqa = "{question}\nAnswer with the option's letter from the given choices directly."
 task_prompts.eval_mme = "{question}"
 
 model_prompts = argparse.Namespace()
@@ -50,7 +51,11 @@ model_prompts.owllrv = model_prompts.owl = (
     "The following is a conversation between a curious human and AI assistant. The assistant gives helpful, "
     "detailed, and polite answers to the user's questions.\nHuman: <image>\nHuman: {prompt}\nAI: "
 )
-model_prompts.llava = model_prompts.llavarlhf = model_prompts.share4v = "### human: <image>\n {prompt} \n### gpt:"
+model_prompts.llava = model_prompts.llavarlhf = model_prompts.share4v = (
+    "A chat between a curious user and an artificial intelligence assistant. "
+    "The assistant gives helpful, detailed, and polite answers to the user's questions. "
+    "USER: <image>\n{prompt}\nASSISTANT:"
+)
 
 # insight
 ## model
@@ -154,18 +159,6 @@ parser.add_argument("--minigpt_path", type=str, default="checkpoints/minigpt4_ll
 parser.add_argument("--minigpt_ckpt_load_path", type=str, default="checkpoints/minigpt4_llama2_7b/pretrained.pth")
 parser.add_argument("--minigpt_ckpt_save_path", type=str, default="checkpoints/minigpt4_llama2_7b")
 
-### instruct-blip
-# parser.add_argument("--blip_train_prompt", type=str, default="Please describe the image.")
-# parser.add_argument(
-#     "--blip_eval_prompt",
-#     type=str,
-#     default="Please describe the image in great detail. Your response should have at least 100 words.",
-# )
-# note that this should be modified in the config file, along with vicuna path
-# parser.add_argument("--blip_path", type=str, default="checkpoints/blip_vicuna_7b/pretrained.pth")
-# parser.add_argument("--blip_ckpt_load_path", type=str, default="checkpoints/blip_vicuna_7b/pretrained.pth")
-# parser.add_argument("--blip_ckpt_save_path", type=str, default="checkpoints/blip_vicuna_7b")
-
 ### mplug-owl:
 parser.add_argument("--owl_path", type=str, default="/root/.cache/huggingface/hub/models--MAGAer13--mplug-owl-llama-7b")
 parser.add_argument(
@@ -246,11 +239,16 @@ parser.add_argument("--pope_result_path", type=str, default="evaluate/pope/resul
 parser.add_argument("--vqa_result_path", type=str, default="evaluate/vqa/result")
 parser.add_argument("--vqa_question_path", type=str, default="dataset/v2_OpenEnded_mscoco_train2014_questions.json")
 parser.add_argument("--vqa_annotation_path", type=str, default="dataset/v2_mscoco_train2014_annotations.json")
+parser.add_argument("--gqa_data_path", type=str, default="LLaVA/playground/data/eval/gqa/data")
+parser.add_argument("--sqa_data_path", type=str, default="LLaVA/playground/data/eval/scienceqa")
+parser.add_argument("--sqa_result_path", type=str, default="evaluate/sqa")
 parser.add_argument("--mme_result_path", type=str, default="evaluate/mme/result")
 parser.add_argument("--mme_text_path", type=str, default="dataset/mme_text")
 parser.add_argument("--mme_image_path", type=str, default="dataset/mme_images")
 parser.add_argument("--default_eval_samples", type=int, default=1600)
 parser.add_argument("--generate_length_penalty", type=float, default=-1)
+parser.add_argument("--generate_temperature", type=float, default=1)
+parser.add_argument("--generate_num_beams", type=int, default=5)
 
 # common control
 parser.add_argument("--device", type=str, default="cuda:0")
