@@ -17,20 +17,18 @@ from common.models import model_loaders, model_forward, generators, data_maps, s
 from common.utils import to_device
 
 basename = getattr(args, f"{args.model}_ckpt_load_path").split("/")[-1][:10]
-pred_path = os.path.join(args.sqa_result_path, f"{args.run_name}_{args.model}_{basename}.json")
-question_path = os.path.join(args.sqa_data_path, "llava_test_CQM-A.json")
-image_dir = os.path.join(args.sqa_data_path, "ScienceQA_DATA", "test")
+pred_path = os.path.join(args.qbench_result_path, f"{args.run_name}_{args.model}_{basename}.json")
+question_path = os.path.join(args.qbench_data_path, "llvisionqa_dev.json")
+image_dir = os.path.join(args.qbench_data_path, "images")
 model_dtype = {"llava": torch.bfloat16, "llavarlhf": torch.bfloat16, "share4v": torch.bfloat16}
 
 
-class SQAData(Dataset):
+class QBenchData(Dataset):
     def __init__(self, processor, start=0, end=int(1e9)):
         super().__init__()
         self.processor = processor
         with open(question_path, "r") as f:
             questions: list[dict] = json.load(f)
-        # filter out unimodal questions
-        questions = list(filter(lambda q: q.get("image", ""), questions))
         self.data = questions[start:end]
 
     def __len__(self):
@@ -38,12 +36,14 @@ class SQAData(Dataset):
 
     def __getitem__(self, index: int):
         question = self.data[index]
-        image_path = os.path.join(image_dir, question["image"])
+        image_path = os.path.join(image_dir, question["img_path"])
         image = Image.open(image_path).convert("RGB")
-        answer = question["conversations"][1]["value"]
-        query = question["conversations"][0]["value"].replace("<image>\n", "")
+        answer = chr(ord("A") + question["candidates"].index(question["correct_ans"]))
+        query = question["question"] + "\n"
+        for label, candidate in zip(["A", "B", "C", "D"], question["candidates"]):
+            query += f"{label}. {candidate}\n"
         text = getattr(args, f"{args.model}_eval_cqa_prompt").format(question=query)
-        return self.processor(image), question["id"], text, answer
+        return self.processor(image), question["img_path"], text, answer
 
     def save(self):
         os.rename(question_path, question_path + ".bak")
@@ -56,7 +56,7 @@ class SQAData(Dataset):
         os.rename(question_path + ".bak", question_path)
 
 
-class SQATrainData(SQAData):
+class QBenchTrainData(QBenchData):
     def __getitem__(self, index):
         image, question_id, question, answer = super().__getitem__(index)
         return data_maps[args.model](dict(image=image, input=question, output=answer, score=0.0), add_end_sym=True)
@@ -64,7 +64,7 @@ class SQATrainData(SQAData):
 
 def train(model, vis_processor, start, end):
     # we train both the models for fair comparison, making them better respond to short-answer vqa questions
-    train_data = SQATrainData(vis_processor, start, end)
+    train_data = QBenchTrainData(vis_processor, start, end)
     train_loader = DataLoader(train_data, args.train_bs_total, True, collate_fn=sample_collators[args.model])
     optim = AdamW(model.parameters(), lr=args.train_lr, weight_decay=args.train_wd)
     for batch in tqdm(train_loader):
@@ -78,7 +78,7 @@ def train(model, vis_processor, start, end):
 
 
 def inference(model, vis_processor, start, end):
-    eval_data = SQAData(vis_processor, start, end)
+    eval_data = QBenchData(vis_processor, start, end)
     eval_loader = DataLoader(eval_data, args.infer_bs_total, False)
     model.eval()
     model.to(torch.float16)

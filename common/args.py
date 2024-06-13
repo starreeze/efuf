@@ -42,8 +42,9 @@ task_prompts.train = "Please describe the image."
 task_prompts.eval = "Please describe the image in great detail. Your response should have at least 100 words."
 task_prompts.eval_pope = "According to the given image, answer yes or no to the question faithfully: {question}"
 task_prompts.eval_vqa = "{question}\nAnswer the question using a single word or phrase."
-task_prompts.eval_sqa = "{question}\nAnswer with the option's letter from the given choices directly."
+task_prompts.eval_cqa = "{question}\nAnswer with the option's letter from the given choices directly."
 task_prompts.eval_mme = "{question}"
+task_prompts.eval_tqa = "{question}"
 
 model_prompts = argparse.Namespace()
 model_prompts.minigpt = "[INST] <Img><ImageHere></Img> {prompt} [/INST]"
@@ -242,6 +243,10 @@ parser.add_argument("--vqa_annotation_path", type=str, default="dataset/v2_mscoc
 parser.add_argument("--gqa_data_path", type=str, default="LLaVA/playground/data/eval/gqa/data")
 parser.add_argument("--sqa_data_path", type=str, default="LLaVA/playground/data/eval/scienceqa")
 parser.add_argument("--sqa_result_path", type=str, default="evaluate/sqa")
+parser.add_argument("--tqa_data_path", type=str, default="LLaVA/playground/data/eval/textvqa")
+parser.add_argument("--tqa_result_path", type=str, default="evaluate/tqa")
+parser.add_argument("--qbench_data_path", type=str, default="LLaVA/playground/data/eval/qbench")
+parser.add_argument("--qbench_result_path", type=str, default="evaluate/qbench")
 parser.add_argument("--mme_result_path", type=str, default="evaluate/mme/result")
 parser.add_argument("--mme_text_path", type=str, default="dataset/mme_text")
 parser.add_argument("--mme_image_path", type=str, default="dataset/mme_images")
