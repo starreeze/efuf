@@ -559,13 +559,13 @@ class LlavaModel:
 
     def forward(self, model, samples, _):
         embed_image = model.prepare_inputs_labels_for_multimodal
-        if args.model in ["llava", "llavarlhf"]:
-            input_ids, _, attention_mask, past_key_values, inputs_embeds, labels = embed_image(
-                samples["input_ids"], None, samples["attention_mask"], None, samples["labels"], samples["image"]
-            )
-        else:  # no position_ids for share4v
+        if args.model == "share4v":  # no position_ids for share4v
             input_ids, attention_mask, past_key_values, inputs_embeds, labels = embed_image(
                 samples["input_ids"], samples["attention_mask"], None, samples["labels"], samples["image"]
+            )
+        else:
+            input_ids, _, attention_mask, past_key_values, inputs_embeds, labels = embed_image(
+                samples["input_ids"], None, samples["attention_mask"], None, samples["labels"], samples["image"]
             )
         del samples["input_ids"], samples["attention_mask"], samples["labels"], samples["image"]
         logits: torch.Tensor = model(
@@ -633,6 +633,100 @@ class LlavaModel:
                 samples = [sample for x in inputs for sample in x[k]]
                 ret[k] = torch.nn.utils.rnn.pad_sequence(samples, batch_first=True, padding_value=pad_value[k])
         return ret
+
+
+class LlavaHaDpo(LlavaModel):
+    def load(self, ckpt, device="cuda", train=False, model_args=[]):
+        from llava.model.language_model.llava_llama import LlavaLlamaForCausalLM as VLM
+        from llava.mm_utils import tokenizer_image_token, process_images
+        from llava.constants import IGNORE_INDEX
+        from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig, BitsAndBytesConfig
+
+        lora_cfg_pretrained = AutoConfig.from_pretrained(args.llava_lora_path)
+
+        parser = transformers.HfArgumentParser((self.ModelArguments, self.DataArguments, self.TrainingArguments))  # type: ignore
+        model_args, data_args, training_args = parser.parse_args_into_dataclasses(
+            ["--output_dir", getattr(args, f"{args.model}_ckpt_save_path")]
+        )
+
+        dtype = args.train_dtype if train else torch.float16
+        # model: VLM = VLM.from_pretrained(  # XXX error!
+        #     args.llava_path, local_files_only=True, device_map={"": device}, torch_dtype=dtype
+        # )  # type: ignore
+        model = VLM.from_pretrained(
+            args.llava_path,
+            config=lora_cfg_pretrained,
+            # low_cpu_mem_usage=True,
+            local_files_only=True,
+            device_map={"": device},
+            torch_dtype=dtype,
+        )
+        model.config.use_cache = False
+        model.model.requires_grad_(False)
+
+        tokenizer = transformers.AutoTokenizer.from_pretrained(
+            getattr(args, f"{args.model}_path"),
+            model_max_length=training_args.model_max_length,
+            padding_side="right",
+            use_fast=False,
+        )
+        tokenizer.pad_token = tokenizer.unk_token
+        non_lora_trainables = torch.load(
+            os.path.join(args.llava_lora_path, "non_lora_trainables.bin"), map_location="cpu"
+        )
+        non_lora_trainables = {
+            (k[11:] if k.startswith("base_model.") else k): v for k, v in non_lora_trainables.items()
+        }
+        non_lora_trainables = {(k[6:] if k.startswith("model.") else k): v for k, v in non_lora_trainables.items()}
+        try:
+            model.load_state_dict(non_lora_trainables, strict=False)
+        except BaseException:
+            pass
+        from peft import PeftModel
+
+        model = PeftModel.from_pretrained(model, args.llava_lora_path)
+        model = model.merge_and_unload()
+
+        model.get_model().initialize_vision_modules(model_args=model_args, fsdp=training_args.fsdp)
+
+        vision_tower = model.get_vision_tower()
+        vision_tower.to(dtype=dtype, device=device)
+
+        model.config.image_aspect_ratio = data_args.image_aspect_ratio
+        model.config.tokenizer_padding_side = tokenizer.padding_side
+        model.config.tokenizer_model_max_length = tokenizer.model_max_length
+
+        model.config.tune_mm_mlp_adapter = True
+        model.requires_grad_(False)
+        for p in model.get_model().mm_projector.parameters():
+            p.requires_grad = True
+
+        model.config.mm_use_im_start_end = data_args.mm_use_im_start_end = model_args.mm_use_im_start_end
+        model.config.mm_projector_lr = training_args.mm_projector_lr
+        training_args.use_im_start_end = model_args.mm_use_im_start_end
+        model.config.mm_use_im_patch_token = model_args.mm_use_im_patch_token
+        model.initialize_vision_tokenizer(model_args, tokenizer=tokenizer)
+
+        self.ignore_value = IGNORE_INDEX
+        self.tokenizer = tokenizer
+        vis_processor = model.get_model().get_vision_tower().image_processor  # type: ignore
+        self.tokenize_image = partial(tokenizer_image_token, tokenizer=self.tokenizer, return_tensors="pt")
+        # load_ckpt(model, ckpt, device)
+        model.train(train)
+
+        freeze_modules: list[torch.nn.Module] = [
+            model.model.vision_tower,  # type: ignore
+            model.model.embed_tokens,
+            model.model.norm,
+            model.model.layers,
+            model.lm_head,
+        ]
+        for module in freeze_modules:
+            module.eval()
+            for param in module.parameters():
+                param.requires_grad = False
+
+        return model, lambda x: vis_processor.preprocess(x, return_tensors="pt")["pixel_values"][0]
 
 
 class Llavarlhf(LlavaModel):
@@ -712,6 +806,7 @@ class Llavarlhf(LlavaModel):
 
 llava_model = LlavaModel()
 llavarlhf_model = Llavarlhf()
+llavahadpo_model = LlavaHaDpo()
 owl_model = OWl()
 owllrv_model = OWLlrv()
 model_loaders = {
@@ -722,6 +817,7 @@ model_loaders = {
     "owl": owl_model.load,
     "owllrv": owllrv_model.load,
     "llavarlhf": llavarlhf_model.load,
+    "llavahadpo": llavahadpo_model.load,
 }
 data_maps = {
     "minigpt": minigpt_data_map,
@@ -731,6 +827,7 @@ data_maps = {
     "owl": owl_model.data_map,
     "owllrv": owllrv_model.data_map,
     "llavarlhf": llavarlhf_model.data_map,
+    "llavahadpo": llavahadpo_model.data_map,
 }
 sample_collators = {
     "minigpt": None,
@@ -740,6 +837,7 @@ sample_collators = {
     "owl": owl_model.collator,
     "owllrv": owllrv_model.collator,
     "llavarlhf": llavarlhf_model.collator,
+    "llavahadpo": llavahadpo_model.collator,
 }
 batch_collators = {
     "minigpt": merge_batch_collator,
@@ -749,6 +847,7 @@ batch_collators = {
     "owl": merge_batch_collator,
     "owllrv": merge_batch_collator,
     "llavarlhf": llavarlhf_model.pad_batch_collator,
+    "llavahadpo": llavahadpo_model.pad_batch_collator,
 }
 generators = {
     "minigpt": minigpt_generate,
@@ -758,6 +857,7 @@ generators = {
     "owl": owl_model.generate,
     "owllrv": owllrv_model.generate,
     "llavarlhf": llavarlhf_model.generate,
+    "llavahadpo": llavahadpo_model.generate,
 }
 model_forward = {
     "minigpt": lambda model, samples, add_end_sym: model(samples, add_end_sym=add_end_sym, reduction="none")["loss"],
@@ -767,6 +867,7 @@ model_forward = {
     "owl": owl_model.forward,
     "owllrv": owllrv_model.forward,
     "llavarlhf": llavarlhf_model.forward,
+    "llavahadpo": llavahadpo_model.forward,
 }
 
 

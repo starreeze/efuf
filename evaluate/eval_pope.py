@@ -19,7 +19,12 @@ from common.utils import to_device
 eval_data_path = os.path.abspath(os.path.join(args.pope_result_path, "data.json"))
 basename = getattr(args, f"{args.model}_ckpt_load_path").split("/")[-1][:10]
 pred_path = os.path.join(args.pope_result_path, f"{args.run_name}_{args.model}_{basename}.json")
-model_dtype = {"llava": torch.bfloat16, "llavarlhf": torch.bfloat16, "share4v": torch.bfloat16}
+model_dtype = {
+    "llava": torch.bfloat16,
+    "llavarlhf": torch.bfloat16,
+    "llavahadpo": torch.bfloat16,
+    "share4v": torch.bfloat16,
+}
 
 
 def construct_data():

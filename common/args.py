@@ -52,7 +52,7 @@ model_prompts.owllrv = model_prompts.owl = (
     "The following is a conversation between a curious human and AI assistant. The assistant gives helpful, "
     "detailed, and polite answers to the user's questions.\nHuman: <image>\nHuman: {prompt}\nAI: "
 )
-model_prompts.llava = model_prompts.llavarlhf = model_prompts.share4v = (
+model_prompts.llava = model_prompts.llavarlhf = model_prompts.llavahadpo = model_prompts.share4v = (
     "A chat between a curious user and an artificial intelligence assistant. "
     "The assistant gives helpful, detailed, and polite answers to the user's questions. "
     "USER: <image>\n{prompt}\nASSISTANT:"
@@ -198,6 +198,24 @@ parser.add_argument(
     default="/root/.cache/huggingface/hub/models--openai--clip-vit-large-patch14-336/snapshots/ce19dc912ca5cd21c8a653c79e251e808ccabcd1",
 )
 parser.add_argument("--llava_ckpt_save_path", type=str, default="checkpoints/llava_vicuna_7b")
+
+### llava-hadpo
+parser.add_argument(
+    "--llava_lora_path",
+    type=str,
+    default="/home/ant/.cache/huggingface/hub/models--juliozhao--hadpo-llava-1.5/snapshots/72b1bcf8d86e60937e1df1ca1386d1c97bf95eb1",
+)
+parser.add_argument(
+    "--llavahadpo_ckpt_load_path",
+    type=str,
+    default="/root/.cache/huggingface/hub/models--liuhaotian--llava-v1.5-7b/snapshots/12e054b30e8e061f423c7264bc97d4248232e965",
+)
+parser.add_argument(
+    "--llavahadpo_path",
+    type=str,
+    default="/root/.cache/huggingface/hub/models--liuhaotian--llava-v1.5-7b/snapshots/12e054b30e8e061f423c7264bc97d4248232e965",
+)
+parser.add_argument("--llavahadpo_ckpt_save_path", type=str, default="checkpoints/llava-hadpo")
 
 ### llavarlhf:
 parser.add_argument(
