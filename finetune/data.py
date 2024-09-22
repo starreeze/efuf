@@ -4,36 +4,68 @@
 "common data loader, without specific model configuration"
 
 from __future__ import annotations
-import os, sys, json
+
+import json
+import os
+import sys
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
-from common.utils import ContinuousDataLoader
-from common.models import data_maps, sample_collators
-from common.args import args
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset, random_split
+from tqdm import tqdm
+
+from common.args import args
+from common.models import data_maps, sample_collators
+from common.utils import ContinuousDataLoader
 
 
 class GoldData(Dataset):
     def __init__(self, vis_processor):
         super(GoldData, self).__init__()
-        self.model_prompt = getattr(args, f"{args.model}_train_prompt")
+        self.model_prompt = getattr(args, f"{args.model}_train_vqa_prompt")
         self.vis_processor = vis_processor
-        with open(os.path.join(args.annotation_path, "captions_train2014.json"), "r") as f:
-            self.data = json.load(f)["annotations"]
+        self.data = self.load_vqa()
+
+    @staticmethod
+    def load_vqa():
+        if os.path.exists(args.vqa_data_path):
+            processed = json.load(open(args.vqa_data_path, "r"))
+            if len(processed) >= args.llava_data_size_k * 1000:
+                return processed
+
+        processed = []
+        print("converting vqa data...")
+        data = json.load(open(args.llava_data_path, "r"))
+        for s in tqdm(data[: args.llava_data_size_k * 1000]):
+            if "image" not in s:
+                continue
+            image_path = os.path.join(args.vqa_image_dir, s["image"])
+            if not os.path.exists(image_path):
+                continue
+            processed.append(
+                {
+                    "input": s["conversations"][0]["value"].replace("<image>", "").strip(),
+                    "output": s["conversations"][1]["value"].strip(),
+                    "image": image_path,
+                }
+            )
+        json.dump(processed, open(args.vqa_data_path, "w"), indent=2)
+        return processed
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, index):
         sample = self.data[index]
-        image_name = f"{args.image_prefix}{sample['image_id']:012d}.jpg"
-        image_path = os.path.join(args.image_dir_path, image_name)
-        image = self.vis_processor(Image.open(image_path).convert("RGB"))
-        caption = t if (t := sample["caption"]).endswith(tuple(args.subsentence_splitter_set)) else t + "."
+        image = self.vis_processor(Image.open(sample["image"]).convert("RGB"))
         return data_maps[args.model](
-            {"image": image, "input": self.model_prompt, "output": caption, "score": args.gold_clip_score}
+            {
+                "image": image,
+                "input": self.model_prompt.format(question=sample["input"]),
+                "output": sample["output"],
+                "score": args.gold_clip_score,
+            }
         )
 
 

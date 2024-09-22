@@ -3,25 +3,33 @@
 # @Author  : Shangyu.Xing (starreeze@foxmail.com)
 
 from __future__ import annotations
-import os, sys, json, torch, wandb
+
+import json
+import os
+import sys
+
+import torch
+import wandb
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
-from common.utils import Logger, create_placeholder
+
 from common.args import args
+from common.utils import Logger, create_placeholder
 
-# if args.device != "cpu":
-#     placeholder = create_placeholder(45210)
-# else:
-#     placeholder = None
+os.environ["WANDB_MODE"] = "offline"
+os.environ["http_proxy"] = os.environ["https_proxy"] = args.proxy
+os.environ["WANDB__SERVICE_WAIT"] = "300"
 
-from tqdm import tqdm
 from time import time
-from torch.utils.data import DataLoader
+
 from torch.optim import AdamW
+from torch.utils.data import DataLoader
+from tqdm import tqdm
+
 from common.models import model_loaders
 from finetune.data import load_datasets
-from finetune.loss import get_loss, WeightScheduler, get_loss_eval
+from finetune.loss import WeightScheduler, get_loss, get_loss_eval
 
 
 def train_step(
@@ -84,7 +92,7 @@ def train(
     train_logger = Logger(wandb.log, "train")
     # model.train()
     num_step = len(train_loader_neg)
-    eval_per_n_step = num_step // args.eval_per_epoch
+    eval_per_n_step = num_step // args.eval_per_epoch + 1
     pos_w_scheduler = WeightScheduler(
         args.pos_w_start, args.pos_w_end, num_step, args.pos_w_start_step_pos, type=args.pos_w_sched_type
     )
@@ -101,9 +109,18 @@ def train(
                 evaluate(model, valid_loader_pos, valid_loader_gold, valid_loader_sent, valid_loader_neg)
                 if step:
                     save_ckpt(model, step)
-            train_step(
-                model, pos, gold, sent, neg, step, epoch, pos_w_scheduler, neg_w_scheduler, optimizer, train_logger
-            )
+            try:
+                train_step(
+                    model, pos, gold, sent, neg, step, epoch, pos_w_scheduler, neg_w_scheduler, optimizer, train_logger
+                )
+            except RuntimeError as e:
+                if "out of memory" in str(e) and args.skip_oom_batch:
+                    tqdm.write(f"Skipping batch {batch_idx} due to OOM error.")
+                    # Free up memory
+                    del pos, gold, sent, neg
+                    torch.cuda.empty_cache()
+                else:
+                    raise e
         train_logger.clear()
 
 
@@ -124,10 +141,7 @@ def save_ckpt(model: torch.nn.Module, step: int):
 
 
 def main():
-    # print(args)
-    os.environ["WANDB_MODE"] = "offline"
-    os.environ["http_proxy"] = os.environ["https_proxy"] = args.proxy
-    wandb.init(project="lmm_hal", entity=args.wandb_user, name=args.model, config=vars(args), sync_tensorboard=False)
+    wandb.init(project="efuf", entity=args.wandb_user, name=args.model, config=vars(args), sync_tensorboard=False)
     print("W&B initialized.")
 
     model_load_path = getattr(args, f"{args.model}_ckpt_load_path")

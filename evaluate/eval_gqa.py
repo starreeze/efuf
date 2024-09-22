@@ -112,7 +112,10 @@ def eval():
         pass
     if not "skip_train" in args.run_name:
         train(model, vis_processor, start=0, end=args.end_pos)
-    inference(model, vis_processor, start=0, end=args.default_eval_samples)
+        inference_kwargs = {"end": args.default_eval_samples}
+    else:
+        inference_kwargs = {"end": args.end_pos}
+    inference(model, vis_processor, start=0, **inference_kwargs)
     # os.system(f"cd {args.gqa_data_path} && python eval/eval_1.py --tier testdev_balanced")
 
 

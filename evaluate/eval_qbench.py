@@ -40,10 +40,12 @@ class QBenchData(Dataset):
         image = Image.open(image_path).convert("RGB")
         answer = chr(ord("A") + question["candidates"].index(question["correct_ans"]))
         query = question["question"] + "\n"
+        choice_map = {}
         for label, candidate in zip(["A", "B", "C", "D"], question["candidates"]):
             query += f"{label}. {candidate}\n"
+            choice_map[label] = candidate.lower()
         text = getattr(args, f"{args.model}_eval_cqa_prompt").format(question=query)
-        return self.processor(image), question["img_path"], text, answer
+        return self.processor(image), question["img_path"], text, answer, json.dumps(choice_map)
 
     def save(self):
         os.rename(question_path, question_path + ".bak")
@@ -58,7 +60,7 @@ class QBenchData(Dataset):
 
 class QBenchTrainData(QBenchData):
     def __getitem__(self, index):
-        image, question_id, question, answer = super().__getitem__(index)
+        image, question_id, question, answer, _ = super().__getitem__(index)
         return data_maps[args.model](dict(image=image, input=question, output=answer, score=0.0), add_end_sym=True)
 
 
@@ -86,12 +88,17 @@ def inference(model, vis_processor, start, end):
     with torch.no_grad():
         results = []
         for batch in tqdm(eval_loader):
-            image, question_id, question, answer = to_device(batch)  # type: ignore
+            image, question_id, question, answer, choice_maps = to_device(batch)  # type: ignore
             with autocast(dtype=torch.float16):
                 responses = generators[args.model](model, question, image)
-            for q, response, ans in zip(question_id, responses, answer):
+            for q, response, ans, choice_map in zip(question_id, responses, answer, choice_maps):
                 results.append({"question_id": q, "prediction": response})
-                if ans in response:
+                choice_map = json.loads(choice_map)  # type: ignore
+                if (
+                    ans in response
+                    or choice_map.get(ans[0], "@!#") in response.lower()
+                    and "match_content" in args.run_name
+                ):
                     correct += 1
             total += len(question_id)
     print(f"correct: {correct}, total: {total}, acc: {correct / total}")

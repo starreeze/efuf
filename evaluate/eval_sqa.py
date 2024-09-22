@@ -3,7 +3,7 @@
 # @Author  : Shangyu.Xing (starreeze@foxmail.com)
 
 from __future__ import annotations
-import os, sys, json, torch
+import os, sys, json, torch, re
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
@@ -42,8 +42,13 @@ class SQAData(Dataset):
         image = Image.open(image_path).convert("RGB")
         answer = question["conversations"][1]["value"]
         query = question["conversations"][0]["value"].replace("<image>\n", "")
+        choices_match = re.search(r"\nA\. .*\nB\. ", query)
+        if choices_match:
+            choices = query[choices_match.span()[0] :].strip()
+        else:
+            choices = ""
         text = getattr(args, f"{args.model}_eval_cqa_prompt").format(question=query)
-        return self.processor(image), question["id"], text, answer
+        return self.processor(image), question["id"], text, answer, choices
 
     def save(self):
         os.rename(question_path, question_path + ".bak")
@@ -58,7 +63,7 @@ class SQAData(Dataset):
 
 class SQATrainData(SQAData):
     def __getitem__(self, index):
-        image, question_id, question, answer = super().__getitem__(index)
+        image, question_id, question, answer, _ = super().__getitem__(index)
         return data_maps[args.model](dict(image=image, input=question, output=answer, score=0.0), add_end_sym=True)
 
 
@@ -86,12 +91,17 @@ def inference(model, vis_processor, start, end):
     with torch.no_grad():
         results = []
         for batch in tqdm(eval_loader):
-            image, question_id, question, answer = to_device(batch)  # type: ignore
+            image, question_id, question, answer, choices = to_device(batch)  # type: ignore
             with autocast(dtype=torch.float16):
                 responses = generators[args.model](model, question, image)
-            for q, response, ans in zip(question_id, responses, answer):
+            for q, response, ans, choice in zip(question_id, responses, answer, choices):
                 results.append({"question_id": q, "prediction": response})
-                if ans in response:
+                choice_map = {c.split(". ")[0]: c.split(". ")[1].lower() for c in choice.split("\n")} if choices else {}
+                if (
+                    ans in response
+                    or choice_map.get(ans[0], "@!#") in response.lower()
+                    and "match_content" in args.run_name
+                ):
                     correct += 1
             total += len(question_id)
     print(f"correct: {correct}, total: {total}, acc: {correct / total}")

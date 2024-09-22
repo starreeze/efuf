@@ -4,37 +4,37 @@
 # @Note    : some part of the code is from RLHF-V
 
 from __future__ import annotations
-import sys, os, nltk, json
+
+import json
+import os
+import sys
+from collections import Counter
 from typing import Iterable
+
+import nltk
 import numpy as np
 from tqdm import tqdm
-from collections import Counter
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
-from common.args import args
-from common.utils import merge_dict_set
-from evaluate.eval_utils import get_eval_caption
 from nltk.translate import bleu_score
 from nltk.translate.bleu_score import SmoothingFunction
 
+from common.args import args
+from common.utils import merge_dict_set
+from evaluate.eval_utils import get_eval_caption
 
-def bleu(hyps, refs):
-    #  Calculate bleu_1 and bleu_2.
-    bleu_1 = []
-    bleu_2 = []
-    for hyp, ref in tqdm(zip(hyps, refs), total=len(hyps)):
+
+def bleu(hyps, refs, n: int):
+    assert 0 < n < 5, "BLEU score is only defined for n in [1, 4]"
+    bleu_n = []
+    for hyp, ref in zip(hyps, refs):
+        bleu_weights = [1 / n] * n + [0] * (4 - n)
         score = bleu_score.sentence_bleu(
-            [ref], hyp, smoothing_function=SmoothingFunction().method7, weights=[1, 0, 0, 0]
+            [ref], hyp, smoothing_function=SmoothingFunction().method7, weights=bleu_weights
         )
-        bleu_1.append(score)
-        score = bleu_score.sentence_bleu(
-            [ref], hyp, smoothing_function=SmoothingFunction().method7, weights=[0.5, 0.5, 0, 0]
-        )
-        bleu_2.append(score)
-    bleu_1 = np.average(bleu_1)
-    bleu_2 = np.average(bleu_2)
-    return bleu_1, bleu_2
+        bleu_n.append(score)
+    return np.average(bleu_n)
 
 
 def distinct(seqs):
@@ -205,7 +205,8 @@ def main():
     total_obj, hal_obj, hal_sent, n_word, n_char = chair.compute(image_ids, captions)
 
     print("computing bleu... ")
-    bleu_1, bleu_2 = bleu(captions, ground_truth)
+    bleu_score = {f"BLEU-{n}": bleu(captions, ground_truth, n) for n in [1, 2, 4]}
+    bleu_repr = "\n".join([f"{k}: {v}" for k, v in bleu_score.items()])
 
     print("computing distinct... ")
     distinct1, distinct2 = distinct(captions)
@@ -217,10 +218,7 @@ def main():
         f"\nHallucinated sentences: {hal_sent}"
         f"\nCHAIRs: {hal_sent / len(image_ids)}"
         f"\nCHAIRi: {hal_obj / total_obj}"
-        f"\nAverage caption word len: {n_word / len(image_ids)}"
-        f"\nAverage caption char len: {n_char / len(image_ids)}"
-        f"\nBleu_1 Score: {bleu_1}"
-        f"\nBleu_2 Score: {bleu_2}"
+        f"\n{bleu_repr}"
         f"\nDistinct-1: {distinct1}"
         f"\nDistinct-2: {distinct2}"
     )

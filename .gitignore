@@ -4,6 +4,5 @@ checkpoint*
 tmp.txt
 finetune/sent_stat.py
 *.bak
-lavis
 insight/search.py
 common/gpt_free.py
