@@ -3,8 +3,7 @@ This repo is the official code for paper **EFUF: Efficient Fine-grained Unlearni
 **news**
 
 - 2024.09.20: Our paper is accepted by EMNLP 2024 (main conference)!
-- 2024.09.23: We finished releasing the code and the docs.
-  <!-- - 2024.09.24: Datasets are released for better reproductivity. -->
+- 2024.09.23: We finished releasing the code and the datasets.
   <!-- - 2024.09.24: Checkpoints are released for better reproductivity. -->
 
 ## Overview
@@ -94,7 +93,7 @@ To reproduce our results, you need to prepare the datasets first.
        └── person_keypoints_val2014.json
    ```
 
-3. Download our constructed dataset `pos_neg.json` `sentences.json` from [] and put it to `dataset`. The dir tree should contain at least the following:
+3. Download our constructed dataset `pos_neg.json` `sentences.json` from [huggingface dataset](https://huggingface.co/datasets/starreeze/efuf-unlearning-30k) and put it to `dataset`. The dir tree should contain at least the following:
    ```
    dataset
    ├── llava [...]
@@ -103,6 +102,22 @@ To reproduce our results, you need to prepare the datasets first.
    ├── pos_neg.json
    └── sentences.json
    ```
+
+Note that `pos_neg.json` uses a special format, please refer to `finetune/format_data.py` for details.
+
+```
+from captions, objects and scores format a flattened json file,
+where each object has an entry containing fields: sentence, sub-sentence/object position, score
+
+normal text ... hallucination object/subsentence
+                ^
+                |
+    sub-sentence/object position
+
+sentence: type=str, stripped sentence until the target
+sub-sentence/object mask: type=int, beginning position (char-level) of the unlearn target
+score: float, clip score of the object
+```
 
 ## Training
 
@@ -145,7 +160,7 @@ python evaluate/eval_auto.py --caption_eval_path [caption_path]
 
 ### VQA
 
-After obtaining the trained checkpoint, you can directly evaluate on VQA and reasoning tasks.
+After obtaining the trained checkpoint, you can directly evaluate it on VQA and reasoning tasks.
 
 ```Shell
 python evaluate/eval_[mme/gqa/sqa/qbench].py --model [model_name] --[model_name]_path [pretrained_weights] --[model_name]_ckpt_load_path [checkpoint_path] --run_name skip_train
