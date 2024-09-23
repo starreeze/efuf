@@ -9,7 +9,6 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 from PIL import Image
 from tqdm import tqdm
-from torch.optim import AdamW
 from torch.utils.data import DataLoader, Dataset
 from torch.cuda.amp import autocast  # type: ignore
 from common.args import args
@@ -55,33 +54,6 @@ class GQAData(Dataset):
         os.rename(eval_question_path + ".bak", eval_question_path)
 
 
-class GQATrainData(GQAData):
-    def __init__(self, processor, start=0, end=int(1e9)):
-        self.processor = processor
-        with open(train_question_path, "r") as f:
-            questions: dict = json.load(f)
-        self.data = list(questions.items())[start:end]
-
-    def __getitem__(self, index):
-        image, question_id, question, answer = super().__getitem__(index)
-        return data_maps[args.model](dict(image=image, input=question, output=answer, score=0.0), add_end_sym=True)
-
-
-def train(model, vis_processor, start, end):
-    # we train both the models for fair comparison, making them better respond to short-answer vqa questions
-    train_data = GQATrainData(vis_processor, start, end)
-    train_loader = DataLoader(train_data, args.train_bs_total, True, collate_fn=sample_collators[args.model])
-    optim = AdamW(model.parameters(), lr=args.train_lr, weight_decay=args.train_wd)
-    for batch in tqdm(train_loader):
-        optim.zero_grad()
-        batch: dict = to_device(batch)  # type: ignore
-        with autocast(dtype=torch.float16):
-            loss = model_forward[args.model](model, batch, [True] * args.train_bs_total).mean()
-        tqdm.write(f"loss: {loss.item()}")
-        loss.backward()
-        optim.step()
-
-
 def inference(model, vis_processor, start, end):
     eval_data = GQAData(vis_processor, start, end)
     eval_loader = DataLoader(eval_data, args.infer_bs_total, False)
@@ -110,13 +82,7 @@ def eval():
         model.to(model_dtype[args.model])
     except KeyError:
         pass
-    if not "skip_train" in args.run_name:
-        train(model, vis_processor, start=0, end=args.end_pos)
-        inference_kwargs = {"end": args.default_eval_samples}
-    else:
-        inference_kwargs = {"end": args.end_pos}
-    inference(model, vis_processor, start=0, **inference_kwargs)
-    # os.system(f"cd {args.gqa_data_path} && python eval/eval_1.py --tier testdev_balanced")
+    inference(model, vis_processor, start=0, end=args.default_eval_samples)
 
 
 if __name__ == "__main__":

@@ -9,7 +9,6 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 from PIL import Image
 from tqdm import tqdm
-from torch.optim import AdamW
 from torch.utils.data import DataLoader, Dataset
 from torch.cuda.amp import autocast  # type: ignore
 from common.args import args
@@ -58,27 +57,6 @@ class QBenchData(Dataset):
         os.rename(question_path + ".bak", question_path)
 
 
-class QBenchTrainData(QBenchData):
-    def __getitem__(self, index):
-        image, question_id, question, answer, _ = super().__getitem__(index)
-        return data_maps[args.model](dict(image=image, input=question, output=answer, score=0.0), add_end_sym=True)
-
-
-def train(model, vis_processor, start, end):
-    # we train both the models for fair comparison, making them better respond to short-answer vqa questions
-    train_data = QBenchTrainData(vis_processor, start, end)
-    train_loader = DataLoader(train_data, args.train_bs_total, True, collate_fn=sample_collators[args.model])
-    optim = AdamW(model.parameters(), lr=args.train_lr, weight_decay=args.train_wd)
-    for batch in tqdm(train_loader):
-        optim.zero_grad()
-        batch: dict = to_device(batch)  # type: ignore
-        with autocast(dtype=torch.float16):
-            loss = model_forward[args.model](model, batch, [True] * args.train_bs_total).mean()
-        tqdm.write(f"loss: {loss.item()}")
-        loss.backward()
-        optim.step()
-
-
 def inference(model, vis_processor, start, end):
     eval_data = QBenchData(vis_processor, start, end)
     eval_loader = DataLoader(eval_data, args.infer_bs_total, False)
@@ -115,12 +93,7 @@ def eval():
         model.to(model_dtype[args.model])
     except KeyError:
         pass
-    if not "skip_train" in args.run_name:
-        train(model, vis_processor, start=args.default_eval_samples, end=args.end_pos)
     inference(model, vis_processor, start=0, end=args.default_eval_samples)
-    # os.system(
-    #     f"python sqa/calculate.py --base-dir {os.path.join(args.sqa_data_path, 'ScienceQA_DATA')} --result-file {pred_path}"
-    # )
 
 
 if __name__ == "__main__":

@@ -11,11 +11,9 @@ from glob import glob
 from PIL import Image
 from tqdm import tqdm
 from torch.utils.data import DataLoader, Dataset
-from torch.cuda.amp import autocast  # type: ignore
 from common.args import args
 from common.models import model_loaders, generators
 from common.utils import to_device
-from evaluate.eval_vqa import train
 
 basename = getattr(args, f"{args.model}_ckpt_load_path").split("/")[-1]
 pred_name = f"{args.run_name}_" if args.run_name else ""
@@ -85,9 +83,6 @@ def eval():
         model.to(model_dtype[args.model])
     except KeyError:
         pass
-    # if not os.path.exists(pred_path):
-    if not "skip_train" in args.run_name:
-        train(model, vis_processor, start=0, end=args.end_pos)
     for category_dir in tqdm(os.listdir(args.mme_data_path), position=0):
         if os.path.isdir(os.path.join(args.mme_data_path, category_dir)):
             inference(model, vis_processor, category_dir)

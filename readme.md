@@ -1,10 +1,10 @@
 This repo is the official code for paper **EFUF: Efficient Fine-grained Unlearning Framework for Mitigating Hallucinations in Multimodal Large Language Models**.
 
-**news**
+## News
 
 - 2024.09.20: Our paper is accepted by EMNLP 2024 (main conference)!
-- 2024.09.23: We finished releasing the code and the datasets.
-  <!-- - 2024.09.24: Checkpoints are released for better reproductivity. -->
+- 2024.09.23: We finished releasing the code and datasets!
+- 2024.09.24: LLaVA-EFUF checkpoints are released.
 
 ## Overview
 
@@ -12,9 +12,36 @@ This repo is the official code for paper **EFUF: Efficient Fine-grained Unlearni
 
 ## Checkpoints
 
-We are planning to release the checkpoints of our models. Stay tuned!
+We have released our pre-trained checkpoints for the LLaVA model. You can download it from [starreeze/llava-efuf-7b](https://huggingface.co/starreeze/llava-efuf-7b).
 
-## Install
+To load the full model, run the following code:
+
+```python
+from llava.model.builder import load_pretrained_model
+from llava.utils import disable_torch_init
+from llava.mm_utils import get_model_name_from_path
+
+# load the llava model (unmodified)
+disable_torch_init()
+model_path = "path/to/llava-7b"
+model_base = None
+model_name = get_model_name_from_path(model_path)
+tokenizer, model, image_processor, context_len = load_pretrained_model(model_path, model_base, model_name)
+
+# load efuf checkpoint
+device = "cuda"
+ckpt = "path/to/llava-efuf-7b"
+latest = ckpt if os.path.isfile(ckpt) else os.path.join(ckpt, sorted(os.listdir(ckpt))[-1])
+print(f"Loading from {latest}")
+checkpoint = torch.load(latest, map_location=device)
+model.load_state_dict(checkpoint["model"] if "model" in checkpoint else checkpoint, strict=False)
+
+# then run the model as usual
+```
+
+## Reproduction
+
+### Install
 
 First, clone this repository and navigate to efuf folder.
 
@@ -23,7 +50,7 @@ git clone https://github.com/starreeze/efuf.git
 cd efuf
 ```
 
-### Docker
+#### Docker
 
 We recommend to use docker to prepare the environment.
 
@@ -44,7 +71,7 @@ docker run --gpus all --ipc=host --network=host --rm -it -v .:/workspace efuf:1.
 
 More `-v` options can be added to mount the data and output directories.
 
-### Conda
+#### Conda
 
 ```Shell
 conda create -n efuf python=3.10 -y
@@ -56,7 +83,7 @@ pip install -r deploy/requirements.txt
 
 Finally, you need to install flash-attention manually before running the model.
 
-## Datasets Preparation
+### Datasets Preparation
 
 To reproduce our results, you need to prepare the datasets first.
 
@@ -93,7 +120,7 @@ To reproduce our results, you need to prepare the datasets first.
        └── person_keypoints_val2014.json
    ```
 
-3. Download our constructed dataset `pos_neg.json` `sentences.json` from [huggingface dataset](https://huggingface.co/datasets/starreeze/efuf-unlearning-30k) and put it to `dataset`. The dir tree should contain at least the following:
+3. Download our constructed dataset `pos_neg.json` `sentences.json` from [starreeze/efuf-unlearning-30k](https://huggingface.co/datasets/starreeze/efuf-unlearning-30k) and put it to `dataset`. The dir tree should contain at least the following:
    ```
    dataset
    ├── llava [...]
@@ -119,7 +146,7 @@ sub-sentence/object mask: type=int, beginning position (char-level) of the unlea
 score: float, clip score of the object
 ```
 
-## Training
+### Training
 
 To start training, you need an A100-80G GPU.
 
@@ -134,14 +161,14 @@ python finetune/train.py --model [model_name] --[model_name]_path [pretrained_we
 Example:
 
 ```Shell
-python finetune/train.py --model llava --llava_path /path/to/llava
+python finetune/train.py --model llava --llava_path /path/to/llava --wandb_user starreeze
 ```
 
 After training, the checkpoint will be saved in `checkpoints/model_name/run_name`. You can also look into `common/args.py` to see all the arguments.
 
-## Evaluation
+### Evaluation
 
-### Image Caption
+#### Image Caption
 
 First, run inference on COCO images. The first 1600 images that are not used in training will be used for evaluation.
 
@@ -158,17 +185,17 @@ Then, run the evaluation script:
 python evaluate/eval_auto.py --caption_eval_path [caption_path]
 ```
 
-### VQA
+#### VQA
 
 After obtaining the trained checkpoint, you can directly evaluate it on VQA and reasoning tasks.
 
 ```Shell
-python evaluate/eval_[mme/gqa/sqa/qbench].py --model [model_name] --[model_name]_path [pretrained_weights] --[model_name]_ckpt_load_path [checkpoint_path] --run_name skip_train
+python evaluate/eval_[mme/gqa/sqa/qbench].py --model [model_name] --[model_name]_path [pretrained_weights] --[model_name]_ckpt_load_path [checkpoint_path] --run_name skip_train --generate_num_beams 1 --generate_temperature 0
 ```
 
 The result will be printed in the terminal.
 
-## Extensions
+## More Applications
 
 ### Construct Your Own Unlearning Dataset
 
