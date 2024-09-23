@@ -1,8 +1,10 @@
-This repo is the official code for paper **EFUF: Efficient Fine-grained Unlearning Framework for Mitigating Hallucinations in Multimodal Large Language Models**.
+# EFUF: Efficient Fine-grained Unlearning Framework for MLLM
+
+This repo is the official code for [paper](https://arxiv.org/abs/2402.09801) **EFUF: Efficient Fine-grained Unlearning Framework for Mitigating Hallucinations in Multimodal Large Language Models**.
 
 ## News
 
-- 2024.09.20: Our paper is accepted by EMNLP 2024 (main conference)!
+- 2024.09.20: Our paper is accepted by **EMNLP 2024 (main conference)**!
 - 2024.09.23: We finished releasing the code and datasets!
 - 2024.09.24: LLaVA-EFUF checkpoints are released.
 
@@ -30,16 +32,15 @@ tokenizer, model, image_processor, context_len = load_pretrained_model(model_pat
 
 # load efuf checkpoint
 device = "cuda"
-ckpt = "path/to/llava-efuf-7b"
-latest = ckpt if os.path.isfile(ckpt) else os.path.join(ckpt, sorted(os.listdir(ckpt))[-1])
-print(f"Loading from {latest}")
-checkpoint = torch.load(latest, map_location=device)
+ckpt_path = "/path/to/llava-efuf-7b.pth"
+checkpoint = torch.load(ckpt_path, map_location=device)
 model.load_state_dict(checkpoint["model"] if "model" in checkpoint else checkpoint, strict=False)
 
 # then run the model as usual
+model.generate(...)
 ```
 
-## Reproduction
+## Reproduce
 
 ### Install
 
