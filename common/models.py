@@ -22,7 +22,7 @@ from common.args import args
 
 def load_ckpt(model, ckpt, device="cuda"):
     "load the trainable part from ckpt"
-    if ckpt == getattr(args, f"{args.model}_path"):
+    if ckpt or ckpt == getattr(args, f"{args.model}_path"):
         print(f"Already loaded the original version from {ckpt}")
         return
     latest = ckpt if os.path.isfile(ckpt) else os.path.join(ckpt, sorted(os.listdir(ckpt))[-1])
@@ -232,7 +232,9 @@ class OWl:
         assert len(label_chunk) == self.max_length + 1
 
         # 计算loss 时用到的mask
-        non_padding_mask = [1 if i < enc_length - 1 else 0 for i in range(self.max_length)]  # mask掉padding部分
+        non_padding_mask = [
+            1 if i < enc_length - 1 else 0 for i in range(self.max_length)
+        ]  # mask掉padding部分
 
         enc_chunk = torch.tensor(enc_chunk).long()
         non_padding_mask = torch.tensor(non_padding_mask).long()
@@ -261,11 +263,7 @@ class OWl:
     def data_map(self, inputs: dict, add_end_sym=True) -> dict:
         global debug_print_for_1
         final_text_input = self.preprocess_text(inputs["input"], inputs["output"], add_end_sym=add_end_sym)
-        return {
-            "image": inputs["image"].unsqueeze(0),
-            "text": final_text_input,
-            "score": inputs["score"],
-        }
+        return {"image": inputs["image"].unsqueeze(0), "text": final_text_input, "score": inputs["score"]}
 
     def collator(self, batch: list[dict]) -> dict:
         "参考了Owl/pipeline/utils.py中batchfy的实现"
@@ -279,8 +277,12 @@ class OWl:
         )
 
         text = torch.stack([torch.LongTensor(data["text"]["input_ids"]) for data in batch], dim=0)
-        non_padding_mask = torch.stack([torch.LongTensor(data["text"]["non_padding_mask"]) for data in batch], dim=0)
-        non_media_mask = torch.stack([torch.LongTensor(data["text"]["non_media_mask"]) for data in batch], dim=0)
+        non_padding_mask = torch.stack(
+            [torch.LongTensor(data["text"]["non_padding_mask"]) for data in batch], dim=0
+        )
+        non_media_mask = torch.stack(
+            [torch.LongTensor(data["text"]["non_media_mask"]) for data in batch], dim=0
+        )
         prompt_mask = torch.stack([torch.LongTensor(data["text"]["prompt_mask"]) for data in batch], dim=0)
 
         output_batch = {
@@ -332,7 +334,9 @@ class OWl:
             inputs["pixel_values"] = image
             inputs = {k: v.to(model.dtype) if v.dtype == torch.float else v for k, v in inputs.items()}
             inputs = {k: v.to(model.device) for k, v in inputs.items()}
-            kwargs = {"length_penalty": args.generate_length_penalty} if args.generate_length_penalty != -1 else {}
+            kwargs = (
+                {"length_penalty": args.generate_length_penalty} if args.generate_length_penalty != -1 else {}
+            )
             with torch.no_grad():
                 res = model.generate(
                     **(inputs | kwargs),
@@ -424,7 +428,9 @@ class LlavaModel:
         vision_tower: Optional[str] = field(default=getattr(args, f"{args.model}_vit_path", None))
         mm_vision_select_layer: Optional[int] = field(default=-2)  # default to the last layer
         pretrain_mm_mlp_adapter: Optional[str] = (
-            field(default=os.path.join(args.llava_path, "mm_projector.bin")) if args.model == "llava" else None
+            field(default=os.path.join(args.llava_path, "mm_projector.bin"))
+            if args.model == "llava"
+            else None
         )
         mm_projector_type: Optional[str] = field(default="mlp2x_gelu")
         mm_use_im_start_end: bool = field(default=False)
@@ -445,13 +451,17 @@ class LlavaModel:
         mpt_attn_impl: Optional[str] = field(default="triton")
         model_max_length: int = field(
             default=4096,
-            metadata={"help": "Maximum sequence length. Sequences will be right padded (and possibly truncated)."},
+            metadata={
+                "help": "Maximum sequence length. Sequences will be right padded (and possibly truncated)."
+            },
         )
         double_quant: bool = field(
-            default=True, metadata={"help": "Compress the quantization statistics through double quantization."}
+            default=True,
+            metadata={"help": "Compress the quantization statistics through double quantization."},
         )
         quant_type: str = field(
-            default="nf4", metadata={"help": "Quantization data type to use. Should be one of `fp4` or `nf4`."}
+            default="nf4",
+            metadata={"help": "Quantization data type to use. Should be one of `fp4` or `nf4`."},
         )
         bits: int = field(default=16, metadata={"help": "How many bits to use."})
         lora_enable: bool = False
@@ -467,15 +477,11 @@ class LlavaModel:
         if args.model == "llava":
             from llava.constants import IGNORE_INDEX
             from llava.mm_utils import process_images, tokenizer_image_token
-            from llava.model.language_model.llava_llama import (
-                LlavaLlamaForCausalLM as VLM,
-            )
+            from llava.model.language_model.llava_llama import LlavaLlamaForCausalLM as VLM
         elif args.model == "share4v":
             from share4v.constants import IGNORE_INDEX
             from share4v.mm_utils import process_images, tokenizer_image_token
-            from share4v.model.language_model.share4v_llama import (
-                Share4VLlamaForCausalLM as VLM,
-            )
+            from share4v.model.language_model.share4v_llama import Share4VLlamaForCausalLM as VLM
         else:
             raise NotImplementedError()
 
@@ -486,7 +492,10 @@ class LlavaModel:
 
         dtype = args.train_dtype if train else torch.float16
         model: VLM = VLM.from_pretrained(
-            getattr(args, f"{args.model}_path"), local_files_only=True, device_map={"": device}, torch_dtype=dtype
+            getattr(args, f"{args.model}_path"),
+            local_files_only=True,
+            device_map={"": device},
+            torch_dtype=dtype,
         )  # type: ignore
         model.config.use_cache = False
         model.model.requires_grad_(False)
@@ -542,7 +551,9 @@ class LlavaModel:
 
     def data_map(self, inputs: dict, add_end_sym=True) -> dict:
         input_ids = self.tokenize_image(inputs["input"])
-        output_ids = self.tokenizer(inputs["output"], add_special_tokens=False, return_tensors="pt").input_ids[0]
+        output_ids = self.tokenizer(
+            inputs["output"], add_special_tokens=False, return_tensors="pt"
+        ).input_ids[0]
         if add_end_sym:
             output_ids = torch.cat(
                 [output_ids, self.tokenizer.eos_token_id * torch.ones(len(output_ids), dtype=torch.long)]
@@ -550,7 +561,9 @@ class LlavaModel:
         return {
             "image": inputs["image"],
             "input_ids": torch.cat([input_ids, output_ids]),  # type: ignore
-            "labels": torch.cat([torch.ones(len(input_ids), dtype=torch.long) * self.ignore_value, output_ids]),
+            "labels": torch.cat(
+                [torch.ones(len(input_ids), dtype=torch.long) * self.ignore_value, output_ids]
+            ),
             "score": inputs["score"],
         }
 
@@ -577,7 +590,12 @@ class LlavaModel:
             )
         else:
             input_ids, _, attention_mask, past_key_values, inputs_embeds, labels = embed_image(
-                samples["input_ids"], None, samples["attention_mask"], None, samples["labels"], samples["image"]
+                samples["input_ids"],
+                None,
+                samples["attention_mask"],
+                None,
+                samples["labels"],
+                samples["image"],
             )
         del samples["input_ids"], samples["attention_mask"], samples["labels"], samples["image"]
         logits: torch.Tensor = model(
@@ -613,7 +631,9 @@ class LlavaModel:
         # mind the padding if want to modify it into vqa
         # input_ids = input_ids.unsqueeze(0).expand([len(texts), -1]).cuda()
         results = []
-        kwargs = {"length_penalty": args.generate_length_penalty} if args.generate_length_penalty != -1 else {}
+        kwargs = (
+            {"length_penalty": args.generate_length_penalty} if args.generate_length_penalty != -1 else {}
+        )
         for text, image in zip(texts, images):
             input_ids: torch.Tensor = self.tokenize_image(text).cuda().unsqueeze(0)  # type: ignore
             with torch.inference_mode():
@@ -626,13 +646,19 @@ class LlavaModel:
                     max_new_tokens=args.max_new_tokens,
                     **kwargs,
                 )
-            result = self.tokenizer.batch_decode(output_ids[:, input_ids.shape[1] :], skip_special_tokens=True)[0]
+            result = self.tokenizer.batch_decode(
+                output_ids[:, input_ids.shape[1] :], skip_special_tokens=True
+            )[0]
             results.append(result)
         return results
 
     def pad_batch_collator(self, *inputs: dict):
         "a higher level collator that collate multiple batches into one, by padding the ids/masks and merging other data"
-        pad_value = {"input_ids": self.tokenizer.pad_token_id, "attention_mask": 0, "labels": self.ignore_value}
+        pad_value = {
+            "input_ids": self.tokenizer.pad_token_id,
+            "attention_mask": 0,
+            "labels": self.ignore_value,
+        }
         ret = {}
         for k in inputs[0].keys():
             assert isinstance(inputs[0][k], torch.Tensor)
@@ -640,18 +666,15 @@ class LlavaModel:
                 ret[k] = torch.cat([x[k] for x in inputs])
             else:
                 samples = [sample for x in inputs for sample in x[k]]
-                ret[k] = torch.nn.utils.rnn.pad_sequence(samples, batch_first=True, padding_value=pad_value[k])
+                ret[k] = torch.nn.utils.rnn.pad_sequence(
+                    samples, batch_first=True, padding_value=pad_value[k]
+                )
         return ret
 
 
 class LlavaHaDpo(LlavaModel):
     def load(self, ckpt, device="cuda", train=False, model_args=[]):
-        from transformers import (
-            AutoConfig,
-            AutoModelForCausalLM,
-            AutoTokenizer,
-            BitsAndBytesConfig,
-        )
+        from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
         from llava.constants import IGNORE_INDEX
         from llava.mm_utils import process_images, tokenizer_image_token
@@ -692,7 +715,9 @@ class LlavaHaDpo(LlavaModel):
         non_lora_trainables = {
             (k[11:] if k.startswith("base_model.") else k): v for k, v in non_lora_trainables.items()
         }
-        non_lora_trainables = {(k[6:] if k.startswith("model.") else k): v for k, v in non_lora_trainables.items()}
+        non_lora_trainables = {
+            (k[6:] if k.startswith("model.") else k): v for k, v in non_lora_trainables.items()
+        }
         try:
             model.load_state_dict(non_lora_trainables, strict=False)
         except BaseException:
@@ -813,7 +838,9 @@ class Llavarlhf(LlavaModel):
                 device_map={"": device},
                 torch_dtype=dtype,
             )
-            model = PeftModel.from_pretrained(model, os.path.join(args.llavarlhf_path, "rlhf_lora_adapter_model"))
+            model = PeftModel.from_pretrained(
+                model, os.path.join(args.llavarlhf_path, "rlhf_lora_adapter_model")
+            )
             model = model.merge_and_unload()
             tokenizer = transformers.AutoTokenizer.from_pretrained(
                 os.path.join(args.llavarlhf_path, "sft_model"),
@@ -938,8 +965,12 @@ generators = {
     "llavapovid": Llavapovid_model.generate,
 }
 model_forward = {
-    "minigpt": lambda model, samples, add_end_sym: model(samples, add_end_sym=add_end_sym, reduction="none")["loss"],
-    "blip": lambda model, samples, add_end_sym: model(samples, add_end_sym=add_end_sym, reduction="none")["loss"],
+    "minigpt": lambda model, samples, add_end_sym: model(samples, add_end_sym=add_end_sym, reduction="none")[
+        "loss"
+    ],
+    "blip": lambda model, samples, add_end_sym: model(samples, add_end_sym=add_end_sym, reduction="none")[
+        "loss"
+    ],
     "llava": llava_model.forward,
     "share4v": llava_model.forward,
     "owl": owl_model.forward,

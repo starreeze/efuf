@@ -1,6 +1,6 @@
 # EFUF: Efficient Fine-grained Unlearning Framework for MLLM
 
-This repo is the official code for [paper](https://arxiv.org/abs/2402.09801) **EFUF: Efficient Fine-grained Unlearning Framework for Mitigating Hallucinations in Multimodal Large Language Models**.
+This repo is the official code for [**EFUF: Efficient Fine-grained Unlearning Framework for Mitigating Hallucinations in Multimodal Large Language Models**](https://arxiv.org/abs/2402.09801) .
 
 ## News
 
@@ -152,12 +152,16 @@ score: float, clip score of the object
 To start training, you need an A100-80G GPU.
 
 ```Shell
-python finetune/train.py --model [model_name] --[model_name]_path [pretrained_weights] --wandb_user [username]
+python finetune/train.py --model [model_name] --[model_name]_path [pretrained_weights] {--wandb_user [username]} {--run_name [run_name]} {--[model_name]_ckpt_save_path [ckpt_save_path]}
 ```
+
+> Note: in this doc, `{}` represents optional args.
 
 - model_name: `minigpt`, `llava`, `owl`, `share4v`.
 - pretrained_weights: the path to the pretrained weights of the model, huggingface id or local path.
-- wandb_user: your wandb username. If you want to see the train curve on wandb, you need to manually sync after training.
+- wandb_user: your wandb username. If you want to see the train curve on wandb, you need to manually sync after training. Defaults to `none`.
+- run_name: you can name your run for wandb and checkpoint. Defaults to `str(time.time())`.
+- ckpt_save_path: path to the trained checkpoint. The final ckpt will be saved in `[ckpt_save_path]/[run_name]`. Defaults to `checkpoints/model_name`
 
 Example:
 
@@ -165,7 +169,7 @@ Example:
 python finetune/train.py --model llava --llava_path /path/to/llava --wandb_user starreeze
 ```
 
-After training, the checkpoint will be saved in `checkpoints/model_name/run_name`. You can also look into `common/args.py` to see all the arguments.
+You can also look into `common/args.py` to see all the arguments.
 
 ### Evaluation
 
