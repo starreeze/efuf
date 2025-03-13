@@ -195,7 +195,7 @@ python evaluate/eval_auto.py --caption_eval_path [caption_path]
 After obtaining the trained checkpoint, you can directly evaluate it on VQA and reasoning tasks.
 
 ```Shell
-python evaluate/eval_[mme/gqa/sqa/qbench].py --model [model_name] --[model_name]_path [pretrained_weights] --[model_name]_ckpt_load_path [checkpoint_path] --run_name skip_train --generate_num_beams 1 --generate_temperature 0
+python evaluate/eval_[mme/gqa/sqa/qbench].py --model [model_name] --[model_name]_path [pretrained_weights] --[model_name]_ckpt_load_path [checkpoint_path] --generate_num_beams 1 --generate_temperature 0
 ```
 
 The result will be printed in the terminal.
