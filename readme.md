@@ -88,6 +88,8 @@ Finally, you need to install flash-attention manually before running the model.
 
 To reproduce our results, you need to prepare the datasets first.
 
+#### Data for training
+
 1. Download LLaVA stage 2 training data, and put it to `dataset/llava`. The dir tree should contain at least the following:
 
    ```
@@ -147,6 +149,12 @@ sub-sentence/object mask: type=int, beginning position (char-level) of the unlea
 score: float, clip score of the object
 ```
 
+#### Data for evaluation
+
+1. (For evaluating captions) Download our annotated `objects.txt` from [starreeze/efuf-unlearning-30k](https://huggingface.co/datasets/starreeze/efuf-unlearning-30k) and put it to `dataset`.
+2. (For MME) Download the official MME data from https://huggingface.co/datasets/darkyarding/MME/blob/main/MME_Benchmark_release_version.zip, unzip it and put it to `dataset/mme`.
+3. (For GQA, SQA and QBench) Please follow the official instructions of LLaVA to download their data and put them to `LLaVA/playground/data/eval/[mme|gqa|sqa|qbench]`.
+
 ### Training
 
 To start training, you need an A100-80G GPU.
@@ -182,7 +190,7 @@ python evaluate/eval_caption.py --model [model_name] --[model_name]_path [pretra
 ```
 
 - checkpoint_path: the path to the checkpoint (obtained by running train in the last step). If this arg is omitted, it will evaluate on the original model instead.
-- output_path: the path to save the output.
+- caption_path: the path to save the output (caption) path.
 
 Then, run the evaluation script:
 
@@ -222,12 +230,26 @@ You can easily implement finetuning on other models using the EFUF framework. Al
 If you find this helpful, please kindly consider citing our paper:
 
 ```
-@misc{xing2024efuf,
-title={EFUF: Efficient Fine-grained Unlearning Framework for Mitigating Hallucinations in Multimodal Large Language Models},
-author={Shangyu Xing and Fei Zhao and Zhen Wu and Tuo An and Weihao Chen and Chunhui Li and Jianbing Zhang and Xinyu Dai},
-year={2024},
-eprint={2402.09801},
-archivePrefix={arXiv},
-primaryClass={cs.CL}
+@inproceedings{xing-etal-2024-efuf,
+    title = "{EFUF}: Efficient Fine-Grained Unlearning Framework for Mitigating Hallucinations in Multimodal Large Language Models",
+    author = "Xing, Shangyu  and
+      Zhao, Fei  and
+      Wu, Zhen  and
+      An, Tuo  and
+      Chen, Weihao  and
+      Li, Chunhui  and
+      Zhang, Jianbing  and
+      Dai, Xinyu",
+    editor = "Al-Onaizan, Yaser  and
+      Bansal, Mohit  and
+      Chen, Yun-Nung",
+    booktitle = "Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing",
+    month = nov,
+    year = "2024",
+    address = "Miami, Florida, USA",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/2024.emnlp-main.67/",
+    doi = "10.18653/v1/2024.emnlp-main.67",
+    pages = "1167--1181"
 }
 ```
